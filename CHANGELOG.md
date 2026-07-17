@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.0] - 2026-07-17
+
+- feat: require admin password to save gestures (722ba2b)
+
 ## [v0.1.0] - 2026-07-17
 
 - feat: merge web and api into a single app service (8f8c765)
