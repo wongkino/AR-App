@@ -117,6 +117,57 @@ app.delete('/api/gestures/:gestureId', requireAdmin, async (c) => {
   return c.json({ ok: true })
 })
 
+/**
+ * Cantonese (or other) TTS as audio — used on iOS where speechSynthesis
+ * often stays silent when triggered from camera-frame callbacks.
+ */
+app.get('/api/tts', async (c) => {
+  const text = (c.req.query('text') ?? '').trim().slice(0, 180)
+  if (!text) return c.json({ error: '缺少文字' }, 400)
+
+  const langRaw = (c.req.query('lang') ?? 'yue').trim().toLowerCase()
+  const lang =
+    langRaw === 'yue' || langRaw === 'zh-hk' || langRaw === 'zh_hk'
+      ? 'yue'
+      : langRaw === 'zh-tw' || langRaw === 'zh_tw'
+        ? 'zh-TW'
+        : langRaw === 'zh-cn' || langRaw === 'zh_cn' || langRaw === 'zh'
+          ? 'zh-CN'
+          : langRaw.slice(0, 16)
+
+  const upstream = new URL('https://translate.google.com/translate_tts')
+  upstream.searchParams.set('ie', 'UTF-8')
+  upstream.searchParams.set('client', 'tw-ob')
+  upstream.searchParams.set('tl', lang)
+  upstream.searchParams.set('q', text)
+
+  try {
+    const res = await fetch(upstream, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+        Accept: '*/*',
+        Referer: 'https://translate.google.com/',
+      },
+    })
+    if (!res.ok) {
+      return c.json({ error: `TTS 服務回應 ${res.status}` }, 502)
+    }
+    const buf = await res.arrayBuffer()
+    if (buf.byteLength < 64) {
+      return c.json({ error: 'TTS 音訊無效' }, 502)
+    }
+    return new Response(buf, {
+      headers: {
+        'Content-Type': res.headers.get('content-type') ?? 'audio/mpeg',
+        'Cache-Control': 'public, max-age=600',
+      },
+    })
+  } catch {
+    return c.json({ error: '無法取得語音' }, 502)
+  }
+})
+
 const staticRoot = process.env.STATIC_DIR ?? join(process.cwd(), 'public')
 if (existsSync(staticRoot)) {
   app.use('/*', serveStatic({ root: staticRoot }))

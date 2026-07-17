@@ -180,12 +180,12 @@ export function ControlPanel({
 
   const dbLabel =
     dbStatus === 'loading'
-      ? '載入資料庫…'
+      ? '載入中…'
       : dbStatus === 'saving'
-        ? '寫入資料庫…'
+        ? '同步中…'
         : dbStatus === 'ok'
-          ? '已連線資料庫'
-          : '資料庫連線失敗'
+          ? '已連線'
+          : '連線失敗'
 
   return (
     <aside className="panel">
@@ -193,7 +193,7 @@ export function ControlPanel({
         <p className="eyebrow">Gesture Lab</p>
         <h1>用手勢觸發反應</h1>
         <p className="lede">
-          手勢直接存在資料庫。一般模式只能監聽；輸入管理密碼後才能錄製與儲存。
+          任何人都可以錄製本機試用手勢；管理員解鎖後才能寫入共用庫給所有人用。
         </p>
       </header>
 
@@ -213,7 +213,7 @@ export function ControlPanel({
               : '待命'}
         </span>
         <span className={`pill ${canEdit ? 'on' : ''}`}>
-          {canEdit ? '編輯已解鎖' : '僅監聽'}
+          {canEdit ? '可寫入共用' : '本機試用'}
         </span>
         <span
           className={`pill ${dbStatus === 'ok' ? 'on' : ''} ${dbStatus === 'error' ? 'mode-recording' : ''}`}
@@ -228,29 +228,21 @@ export function ControlPanel({
       )}
 
       <section className="block">
-        <h2>資料庫</h2>
-        <p className="hint">所有裝置共用同一份手勢資料，開啟頁面會自動從資料庫載入。</p>
-        <div className="actions">
-          <button type="button" className="secondary" onClick={onReloadDb}>
-            重新載入
-          </button>
-        </div>
-      </section>
-
-      <section className="block">
         <h2>管理密碼</h2>
         {canEdit ? (
           <>
-            <p className="hint">已解鎖錄製／儲存／修改。關閉分頁會自動鎖定。</p>
+            <p className="hint">已解鎖：新儲存的手勢會寫入共用庫。關閉分頁會自動鎖定。</p>
             <div className="actions">
               <button type="button" className="danger" onClick={onLock}>
-                鎖定編輯
+                鎖定寫入
               </button>
             </div>
           </>
         ) : (
           <>
-            <p className="hint">輸入密碼後才能儲存手勢。預設密碼可用環境變數 ADMIN_PASSWORD 設定。</p>
+            <p className="hint">
+              一般用戶可本機試用。輸入管理密碼後，儲存才會同步給所有人。
+            </p>
             <label className="field">
               <span>密碼</span>
               <input
@@ -265,7 +257,7 @@ export function ControlPanel({
             </label>
             <div className="actions">
               <button type="button" className="primary" onClick={onUnlock}>
-                解鎖編輯
+                解鎖寫入
               </button>
             </div>
           </>
@@ -293,59 +285,69 @@ export function ControlPanel({
         </div>
       </section>
 
-      {canEdit && (
-        <section className="block">
-          <h2>錄製手勢</h2>
-          <label className="field">
-            <span>名稱</span>
-            <input
-              value={draftName}
-              onChange={(e) => onDraftNameChange(e.target.value)}
-              placeholder="例如：揮手打招呼"
-              disabled={mode === 'recording'}
-            />
-          </label>
-
-          <ReactionEditor
-            value={draftReaction}
-            onChange={onDraftReactionChange}
+      <section className="block">
+        <h2>錄製手勢</h2>
+        <p className="hint">
+          {canEdit
+            ? '目前為管理模式：儲存後會同步給所有人。'
+            : '目前為本機試用：儲存只留在此裝置。'}
+        </p>
+        <label className="field">
+          <span>名稱</span>
+          <input
+            value={draftName}
+            onChange={(e) => onDraftNameChange(e.target.value)}
+            placeholder="例如：揮手打招呼"
             disabled={mode === 'recording'}
           />
+        </label>
 
-          <div className="actions">
-            {mode !== 'recording' ? (
-              <button type="button" className="primary" onClick={onStartRecord}>
-                開始錄製
-              </button>
-            ) : (
-              <button type="button" className="danger" onClick={onStopRecord}>
-                停止並預覽
-              </button>
-            )}
-            <button
-              type="button"
-              className="secondary"
-              disabled={!canSave || mode === 'recording'}
-              onClick={onSave}
-            >
-              儲存手勢
+        <ReactionEditor
+          value={draftReaction}
+          onChange={onDraftReactionChange}
+          disabled={mode === 'recording'}
+        />
+
+        <div className="actions">
+          {mode !== 'recording' ? (
+            <button type="button" className="primary" onClick={onStartRecord}>
+              開始錄製
             </button>
-          </div>
-        </section>
-      )}
+          ) : (
+            <button type="button" className="danger" onClick={onStopRecord}>
+              停止並預覽
+            </button>
+          )}
+          <button
+            type="button"
+            className="secondary"
+            disabled={!canSave || mode === 'recording'}
+            onClick={onSave}
+          >
+            {canEdit ? '儲存到手勢庫' : '儲存本機試用'}
+          </button>
+        </div>
+      </section>
 
       <section className="block">
-        <h2>已儲存（{gestures.length}）</h2>
+        <div className="block-head">
+          <h2>已儲存（{gestures.length}）</h2>
+          <button
+            type="button"
+            className="text-btn"
+            onClick={onReloadDb}
+            disabled={dbStatus === 'loading'}
+          >
+            重新載入
+          </button>
+        </div>
         {gestures.length === 0 ? (
-          <p className="hint">
-            {canEdit
-              ? '還沒有手勢。先錄一段並儲存。'
-              : '資料庫尚無手勢。請管理員錄製後，再按「重新載入」。'}
-          </p>
+          <p className="hint">還沒有手勢。先錄一段並儲存本機試用，或請管理員寫入共用庫。</p>
         ) : (
           <ul className="gesture-list">
             {gestures.map((g) => {
-              const isEditing = canEdit && editingId === g.id
+              const canModify = canEdit || !!g.localOnly
+              const isEditing = canModify && editingId === g.id
               return (
                 <li key={g.id} className={isEditing ? 'editing' : ''}>
                   {isEditing ? (
@@ -380,13 +382,20 @@ export function ControlPanel({
                   ) : (
                     <>
                       <div>
-                        <strong>{g.name}</strong>
+                        <strong>
+                          {g.name}
+                          {g.localOnly ? (
+                            <span className="gesture-tag">本機</span>
+                          ) : (
+                            <span className="gesture-tag shared">共用</span>
+                          )}
+                        </strong>
                         <span>
                           {g.frames.length} 幀 · {reactionSummary(g.reaction)}
                         </span>
                       </div>
                       <div className="row-actions">
-                        {canEdit && (
+                        {canModify && (
                           <button type="button" onClick={() => startEdit(g)}>
                             改反應
                           </button>
@@ -394,7 +403,7 @@ export function ControlPanel({
                         <button type="button" onClick={() => onTest(g)}>
                           試播
                         </button>
-                        {canEdit && (
+                        {canModify && (
                           <button
                             type="button"
                             className="danger-text"

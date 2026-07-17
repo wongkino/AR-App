@@ -19,6 +19,8 @@ export type SavedGesture = {
   frames: HandFrame[]
   reaction: Reaction
   createdAt: number
+  /** 本機試用：只存在瀏覽器，不會寫入資料庫 */
+  localOnly?: boolean
 }
 
 export type AppMode = 'idle' | 'recording' | 'listening'

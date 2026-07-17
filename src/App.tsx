@@ -13,8 +13,10 @@ import {
   createId,
   loadAdminPassword,
   loadGestures,
+  mergeRemoteGestures,
   saveAdminPassword,
   saveGesturesLocal,
+  sharedGesturesForDb,
 } from './lib/storage'
 import type { AppMode, HandFrame, Reaction, SavedGesture } from './types'
 import './App.css'
@@ -73,7 +75,7 @@ export default function App() {
     try {
       const remote = await fetchGestures()
       skipNextPush.current = true
-      setGestures(remote)
+      setGestures((prev) => mergeRemoteGestures(remote, prev))
       setDbStatus('ok')
     } catch (err) {
       setDbStatus('error')
@@ -112,7 +114,7 @@ export default function App() {
       void (async () => {
         setDbStatus('saving')
         try {
-          await pushGestures(gestures)
+          await pushGestures(sharedGesturesForDb(gestures))
           setDbStatus('ok')
         } catch {
           setDbStatus('error')
@@ -128,7 +130,6 @@ export default function App() {
     if (!frame) return
 
     if (modeRef.current === 'recording') {
-      if (!canEditRef.current) return
       recordBuf.current.push(frame)
       setRecordingCount(recordBuf.current.length)
       return
@@ -212,7 +213,7 @@ export default function App() {
       saveAdminPassword(password)
       setCanEdit(true)
       setPasswordInput('')
-      flash('已解鎖編輯模式')
+      flash('已解鎖：儲存會寫入資料庫')
     } catch (err) {
       flash(err instanceof Error ? err.message : '密碼錯誤')
     }
@@ -227,14 +228,10 @@ export default function App() {
       recordBuf.current = []
       setMode('idle')
     }
-    flash('已鎖定，現在只能監聽')
+    flash('已鎖定：本機試用可繼續，資料庫僅管理員可寫入')
   }, [flash])
 
   const onStartRecord = useCallback(async () => {
-    if (!canEditRef.current) {
-      flash('請先輸入管理密碼')
-      return
-    }
     stopReactions()
     matcherRef.current.clear()
     setLastTriggered(null)
@@ -243,7 +240,11 @@ export default function App() {
     setRecordingCount(0)
     setMode('recording')
     await ensureCamera()
-    flash('開始錄製，請對鏡頭做完一整段手勢')
+    flash(
+      canEditRef.current
+        ? '開始錄製（儲存後會寫入資料庫）'
+        : '開始錄製（本機試用，不會寫入資料庫）',
+    )
   }, [ensureCamera, flash])
 
   const onStopListen = useCallback(() => {
@@ -268,10 +269,6 @@ export default function App() {
   }, [flash, onStartListen])
 
   const onSave = useCallback(() => {
-    if (!canEditRef.current) {
-      flash('請先輸入管理密碼')
-      return
-    }
     if (!pendingFrames || pendingFrames.length < 10) {
       flash('請先錄製一段手勢')
       return
@@ -286,6 +283,7 @@ export default function App() {
       return
     }
 
+    const toDatabase = canEditRef.current
     const next: SavedGesture = {
       id: createId(),
       name,
@@ -295,13 +293,14 @@ export default function App() {
           ? { kind: 'speak', text: draftReaction.text.trim() }
           : { kind: 'play', url: draftReaction.url.trim(), label: draftReaction.label },
       createdAt: Date.now(),
+      ...(toDatabase ? {} : { localOnly: true }),
     }
 
     setGestures((prev) => [next, ...prev])
     setPendingFrames(null)
     setDraftName('')
     setDraftReaction(DEFAULT_REACTION)
-    flash(`已儲存「${name}」到資料庫`)
+    flash(toDatabase ? `已儲存「${name}」到資料庫` : `已儲存「${name}」到本機試用（不會寫入資料庫）`)
   }, [pendingFrames, draftName, draftReaction, gestures.length, flash])
 
   // 開頁後模型就緒即自動開始監聽
@@ -317,14 +316,24 @@ export default function App() {
   }, [ready, onStartListen, flash])
 
   const onDelete = useCallback((id: string) => {
-    if (!canEditRef.current) return
+    const target = gesturesRef.current.find((g) => g.id === id)
+    if (!target) return
+    if (!canEditRef.current && !target.localOnly) {
+      flash('共用手勢需管理密碼才能刪除')
+      return
+    }
     setGestures((prev) => prev.filter((g) => g.id !== id))
-    flash('已刪除手勢')
+    flash(target.localOnly ? '已刪除本機試用手勢' : '已刪除手勢')
   }, [flash])
 
   const onUpdate = useCallback(
     (id: string, patch: { name: string; reaction: Reaction }) => {
-      if (!canEditRef.current) return
+      const target = gesturesRef.current.find((g) => g.id === id)
+      if (!target) return
+      if (!canEditRef.current && !target.localOnly) {
+        flash('共用手勢需管理密碼才能修改')
+        return
+      }
       setGestures((prev) =>
         prev.map((g) => (g.id === id ? { ...g, name: patch.name, reaction: patch.reaction } : g)),
       )
@@ -388,7 +397,7 @@ export default function App() {
                 void enableAudio()
                   .then(() => {
                     setAudioReady(true)
-                    flash('語音已啟用，可再做一次手勢')
+                    flash('語音已啟用（應聽到「叮」）。可再做一次手勢')
                   })
                   .catch(() => flash('無法啟用語音，請確認裝置未靜音'))
               }

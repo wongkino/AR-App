@@ -4,6 +4,10 @@ let currentAudio: HTMLAudioElement | null = null
 let voicesReady: Promise<void> | null = null
 let audioUnlocked = false
 let unlockAudioContext: AudioContext | null = null
+let resumeKeepAlive: number | null = null
+
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 export function isAudioUnlocked(): boolean {
   return audioUnlocked
@@ -20,13 +24,63 @@ export function stopReactions(): void {
   }
 }
 
+function startSpeechKeepAlive(): void {
+  if (resumeKeepAlive != null) return
+  resumeKeepAlive = window.setInterval(() => {
+    if (typeof speechSynthesis === 'undefined') return
+    if (speechSynthesis.paused) speechSynthesis.resume()
+  }, 250)
+}
+
+function isLikelyIOS(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  if (/iPhone|iPad|iPod/i.test(ua)) return true
+  // iPadOS 13+ may report as Macintosh
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
 /**
- * Must be called from a user gesture (tap/click) on iOS/iPadOS,
- * otherwise later speechSynthesis.speak / Audio.play will be blocked.
+ * Must be called from a user gesture (tap/click).
+ * On iOS, speechSynthesis.speak() must run synchronously in that gesture
+ * (before any await), or later programmatic speak() stays silent.
  */
 export async function unlockAudio(): Promise<void> {
   if (typeof window === 'undefined') return
 
+  // 1) Unlock HTMLAudio (reliable path for /api/tts fallback)
+  try {
+    const silent = new Audio(SILENT_WAV)
+    silent.volume = 0.01
+    void silent.play().catch(() => undefined)
+  } catch {
+    // ignore
+  }
+
+  // 2) Unlock Web Speech — MUST be synchronous (no await above this speak)
+  if (typeof speechSynthesis !== 'undefined') {
+    try {
+      speechSynthesis.cancel()
+      const warm = new SpeechSynthesisUtterance('叮')
+      warm.rate = 1.15
+      warm.volume = 1
+      warm.lang = 'zh-HK'
+      const voice = pickSpeechVoice()
+      if (voice) {
+        warm.voice = voice
+        warm.lang = voice.lang || 'zh-HK'
+      }
+      speechSynthesis.speak(warm)
+      speechSynthesis.resume()
+    } catch {
+      // ignore
+    }
+  }
+
+  audioUnlocked = true
+  startSpeechKeepAlive()
+
+  // 3) AudioContext after sync speak (await is OK now)
   try {
     const AC =
       window.AudioContext ||
@@ -46,28 +100,7 @@ export async function unlockAudio(): Promise<void> {
     // ignore
   }
 
-  if (typeof speechSynthesis !== 'undefined') {
-    await ensureVoices()
-    speechSynthesis.cancel()
-    const warm = new SpeechSynthesisUtterance('\u200B')
-    warm.volume = 0
-    warm.rate = 2
-    warm.lang = 'zh-HK'
-    const voice = pickSpeechVoice()
-    if (voice) {
-      warm.voice = voice
-      warm.lang = voice.lang || 'zh-HK'
-    }
-    await new Promise<void>((resolve) => {
-      warm.onend = () => resolve()
-      warm.onerror = () => resolve()
-      speechSynthesis.speak(warm)
-      speechSynthesis.resume()
-      window.setTimeout(resolve, 500)
-    })
-  }
-
-  audioUnlocked = true
+  await ensureVoices()
 }
 
 export async function runReaction(reaction: Reaction): Promise<void> {
@@ -101,6 +134,8 @@ function ensureVoices(): Promise<void> {
         resolve()
       }
       speechSynthesis.addEventListener('voiceschanged', done)
+      // Prime voice list on Safari
+      speechSynthesis.getVoices()
       window.setTimeout(done, 800)
     })
   }
@@ -109,6 +144,7 @@ function ensureVoices(): Promise<void> {
 
 /** Prefer Cantonese, then any Chinese voice (iOS often only has zh-TW / zh-CN). */
 function pickSpeechVoice(): SpeechSynthesisVoice | null {
+  if (typeof speechSynthesis === 'undefined') return null
   const voices = speechSynthesis.getVoices()
   if (voices.length === 0) return null
 
@@ -141,17 +177,48 @@ function pickSpeechVoice(): SpeechSynthesisVoice | null {
 }
 
 async function speak(text: string): Promise<void> {
+  const trimmed = text.trim()
+  if (!trimmed) return
+
+  // iOS: HTMLAudio after unlock is more reliable than speechSynthesis from camera frames
+  if (isLikelyIOS()) {
+    try {
+      await playTtsAudio(trimmed)
+      return
+    } catch {
+      // fall through to Web Speech
+    }
+  }
+
+  try {
+    await speakViaSynthesis(trimmed)
+    return
+  } catch {
+    await playTtsAudio(trimmed)
+  }
+}
+
+function playTtsAudio(text: string): Promise<void> {
+  const url = `/api/tts?text=${encodeURIComponent(text.slice(0, 180))}&lang=yue`
+  return playUrl(url)
+}
+
+async function speakViaSynthesis(text: string): Promise<void> {
   if (typeof speechSynthesis === 'undefined') {
     throw new Error('此瀏覽器不支援語音朗讀')
   }
 
   await ensureVoices()
-  speechSynthesis.cancel()
+
+  // Avoid cancel() on a cold engine when nothing is speaking (hurts some iOS builds)
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel()
+  }
   if (speechSynthesis.paused) {
     speechSynthesis.resume()
   }
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const utter = new SpeechSynthesisUtterance(text)
     utter.lang = 'zh-HK'
     utter.rate = 1
@@ -163,18 +230,22 @@ async function speak(text: string): Promise<void> {
       utter.lang = voice.lang || 'zh-HK'
     }
 
-    // iOS often pauses mid-utterance unless periodically resumed
     const resumeTimer = window.setInterval(() => {
       if (speechSynthesis.paused) speechSynthesis.resume()
     }, 250)
 
+    let settled = false
     const finish = () => {
+      if (settled) return
+      settled = true
       window.clearInterval(resumeTimer)
       resolve()
     }
 
     utter.onend = finish
     utter.onerror = (event) => {
+      if (settled) return
+      settled = true
       window.clearInterval(resumeTimer)
       const err = event.error
       if (err === 'interrupted' || err === 'canceled') {
@@ -186,6 +257,16 @@ async function speak(text: string): Promise<void> {
 
     speechSynthesis.speak(utter)
     speechSynthesis.resume()
+
+    // iOS may swallow speak() with no error — detect and fail over
+    window.setTimeout(() => {
+      if (settled) return
+      if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+        settled = true
+        window.clearInterval(resumeTimer)
+        reject(new Error('speech-not-started'))
+      }
+    }, 450)
   })
 }
 

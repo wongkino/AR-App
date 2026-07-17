@@ -297,6 +297,31 @@ textarea {
   font-weight: 700;
 }
 
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.text-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  min-height: 36px;
+  touch-action: manipulation;
+}
+
+.text-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .hint {
   margin: 0;
   color: var(--muted);
@@ -476,6 +501,25 @@ button:disabled {
   margin-top: 0.15rem;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.gesture-tag {
+  display: inline-block !important;
+  margin-left: 0.45rem;
+  margin-top: 0 !important;
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.68rem !important;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent) !important;
+  background: rgba(46, 90, 74, 0.12);
+  vertical-align: middle;
+}
+
+.gesture-tag.shared {
+  color: var(--muted) !important;
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .row-actions {
