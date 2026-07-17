@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.0] - 2026-07-17
+
+- feat: auto-enable sound with camera start (6b1e290)
+
 ## [v0.5.4] - 2026-07-17
 
 - fix: unstick gesture re-triggers blocked by hung iOS audio (acb9703)
