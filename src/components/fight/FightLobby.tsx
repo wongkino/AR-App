@@ -51,7 +51,7 @@ export function FightLobby({
           <h1>手勢格鬥</h1>
         </div>
         <a className="fight-link" href="/">
-          ← 返回 Gesture Lab
+          ← 返回主頁
         </a>
       </header>
 

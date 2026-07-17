@@ -53,7 +53,7 @@ export function RpsLobby({
           <h1>包剪揼</h1>
         </div>
         <a className="rps-link" href="/">
-          ← 返回 Gesture Lab
+          ← 返回主頁
         </a>
       </header>
 

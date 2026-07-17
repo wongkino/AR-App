@@ -1,0 +1,144 @@
+.home {
+  min-height: 100dvh;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.home-header {
+  text-align: center;
+}
+
+.home-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.home-header h1 {
+  margin: 0.35rem 0 0.5rem;
+  font-family: var(--display);
+  font-size: clamp(2rem, 6vw, 2.8rem);
+}
+
+.home-lede {
+  margin: 0 auto;
+  max-width: 34rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.35rem;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.home-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(15, 118, 110, 0.28);
+  box-shadow: 0 22px 55px rgba(11, 28, 31, 0.16);
+}
+
+.home-card-tag {
+  align-self: flex-start;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.home-card-emoji {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.home-card h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.45rem;
+}
+
+.home-card p {
+  margin: 0;
+  flex: 1;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.home-card-cta {
+  margin-top: 0.35rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.home-footer {
+  margin-top: auto;
+}
+
+.home-settings {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius);
+  background: rgba(255, 252, 248, 0.72);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.18s ease;
+}
+
+.home-settings:hover {
+  background: var(--panel);
+}
+
+.home-settings-icon {
+  font-size: 1.5rem;
+}
+
+.home-settings strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.home-settings small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 700px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+}

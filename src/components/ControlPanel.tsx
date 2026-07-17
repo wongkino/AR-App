@@ -190,15 +190,13 @@ export function ControlPanel({
   return (
     <aside className="panel">
       <header className="panel-brand">
-        <p className="eyebrow">Gesture Lab</p>
-        <h1>用手勢觸發反應</h1>
+        <p className="eyebrow">設定</p>
+        <h1>手勢管理</h1>
         <p className="lede">
-          任何人都可以錄製本機試用手勢；管理員解鎖後才能寫入共用庫給所有人用。
+          錄製與管理手勢資料庫。任何人都可以本機試用；管理員解鎖後才能寫入共用庫。
         </p>
         <p className="hint">
-          <a href="/fight">進入手勢格鬥（多人對戰）→</a>
-          {' · '}
-          <a href="/rps">包剪揼（多人對戰）→</a>
+          <a href="/">← 返回主頁</a>
         </p>
       </header>
 
