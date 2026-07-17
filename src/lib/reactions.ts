@@ -4,13 +4,28 @@ let currentAudio: HTMLAudioElement | null = null
 let voicesReady: Promise<void> | null = null
 let audioUnlocked = false
 let unlockAudioContext: AudioContext | null = null
-let resumeKeepAlive: number | null = null
+let previewResumer: (() => void) | null = null
 
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 export function isAudioUnlocked(): boolean {
   return audioUnlocked
+}
+
+/** App registers this so we can un-pause the camera after audio on iOS. */
+export function setPreviewResumer(fn: (() => void) | null): void {
+  previewResumer = fn
+}
+
+function resumePreviewSoon(): void {
+  // Defer so iOS finishes audio-session handoff before video.play()
+  window.setTimeout(() => {
+    previewResumer?.()
+  }, 50)
+  window.setTimeout(() => {
+    previewResumer?.()
+  }, 300)
 }
 
 export function stopReactions(): void {
@@ -24,31 +39,36 @@ export function stopReactions(): void {
   }
 }
 
-function startSpeechKeepAlive(): void {
-  if (resumeKeepAlive != null) return
-  resumeKeepAlive = window.setInterval(() => {
-    if (typeof speechSynthesis === 'undefined') return
-    if (speechSynthesis.paused) speechSynthesis.resume()
-  }, 250)
-}
-
 function isLikelyIOS(): boolean {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent
   if (/iPhone|iPad|iPod/i.test(ua)) return true
-  // iPadOS 13+ may report as Macintosh
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+function playUnlockBeep(ctx: AudioContext): void {
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = 880
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime)
+  gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.14)
+  osc.connect(gain)
+  gain.connect(ctx.destination)
+  osc.start(ctx.currentTime)
+  osc.stop(ctx.currentTime + 0.15)
 }
 
 /**
  * Must be called from a user gesture (tap/click).
- * On iOS, speechSynthesis.speak() must run synchronously in that gesture
- * (before any await), or later programmatic speak() stays silent.
+ * On iOS we unlock HTMLAudio / AudioContext only — never speechSynthesis —
+ * because TTS "叮" pauses the camera preview.
  */
 export async function unlockAudio(): Promise<void> {
   if (typeof window === 'undefined') return
 
-  // 1) Unlock HTMLAudio (reliable path for /api/tts fallback)
+  // 1) Unlock HTMLAudio (needed for /api/tts)
   try {
     const silent = new Audio(SILENT_WAV)
     silent.volume = 0.01
@@ -57,19 +77,34 @@ export async function unlockAudio(): Promise<void> {
     // ignore
   }
 
-  // 2) Unlock Web Speech — MUST be synchronous (no await above this speak)
-  if (typeof speechSynthesis !== 'undefined') {
+  // 2) Unlock AudioContext + short beep (does not freeze camera like speechSynthesis)
+  try {
+    const AC =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (AC) {
+      if (!unlockAudioContext) unlockAudioContext = new AC()
+      if (unlockAudioContext.state === 'suspended') {
+        // resume() returns a promise; kick it off but also try beep after
+        void unlockAudioContext.resume()
+      }
+      playUnlockBeep(unlockAudioContext)
+      if (unlockAudioContext.state === 'suspended') {
+        await unlockAudioContext.resume()
+        playUnlockBeep(unlockAudioContext)
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3) Desktop only: warm Web Speech without audible "叮"
+  if (!isLikelyIOS() && typeof speechSynthesis !== 'undefined') {
     try {
       speechSynthesis.cancel()
-      const warm = new SpeechSynthesisUtterance('叮')
-      warm.rate = 1.15
-      warm.volume = 1
-      warm.lang = 'zh-HK'
-      const voice = pickSpeechVoice()
-      if (voice) {
-        warm.voice = voice
-        warm.lang = voice.lang || 'zh-HK'
-      }
+      const warm = new SpeechSynthesisUtterance(' ')
+      warm.volume = 0
+      warm.rate = 2
       speechSynthesis.speak(warm)
       speechSynthesis.resume()
     } catch {
@@ -78,29 +113,7 @@ export async function unlockAudio(): Promise<void> {
   }
 
   audioUnlocked = true
-  startSpeechKeepAlive()
-
-  // 3) AudioContext after sync speak (await is OK now)
-  try {
-    const AC =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (AC) {
-      if (!unlockAudioContext) unlockAudioContext = new AC()
-      if (unlockAudioContext.state === 'suspended') {
-        await unlockAudioContext.resume()
-      }
-      const buffer = unlockAudioContext.createBuffer(1, 1, 22050)
-      const source = unlockAudioContext.createBufferSource()
-      source.buffer = buffer
-      source.connect(unlockAudioContext.destination)
-      source.start(0)
-    }
-  } catch {
-    // ignore
-  }
-
-  await ensureVoices()
+  resumePreviewSoon()
 }
 
 export async function runReaction(reaction: Reaction): Promise<void> {
@@ -134,7 +147,6 @@ function ensureVoices(): Promise<void> {
         resolve()
       }
       speechSynthesis.addEventListener('voiceschanged', done)
-      // Prime voice list on Safari
       speechSynthesis.getVoices()
       window.setTimeout(done, 800)
     })
@@ -142,7 +154,6 @@ function ensureVoices(): Promise<void> {
   return voicesReady
 }
 
-/** Prefer Cantonese, then any Chinese voice (iOS often only has zh-TW / zh-CN). */
 function pickSpeechVoice(): SpeechSynthesisVoice | null {
   if (typeof speechSynthesis === 'undefined') return null
   const voices = speechSynthesis.getVoices()
@@ -180,22 +191,19 @@ async function speak(text: string): Promise<void> {
   const trimmed = text.trim()
   if (!trimmed) return
 
-  // iOS: HTMLAudio after unlock is more reliable than speechSynthesis from camera frames
-  if (isLikelyIOS()) {
-    try {
-      await playTtsAudio(trimmed)
-      return
-    } catch {
-      // fall through to Web Speech
-    }
-  }
-
+  // Prefer server TTS + HTMLAudio everywhere (avoids freezing camera on iOS)
   try {
-    await speakViaSynthesis(trimmed)
+    await playTtsAudio(trimmed)
     return
   } catch {
-    await playTtsAudio(trimmed)
+    // fall through
   }
+
+  if (isLikelyIOS()) {
+    throw new Error('無法播放語音，請確認網路與音量')
+  }
+
+  await speakViaSynthesis(trimmed)
 }
 
 function playTtsAudio(text: string): Promise<void> {
@@ -210,7 +218,6 @@ async function speakViaSynthesis(text: string): Promise<void> {
 
   await ensureVoices()
 
-  // Avoid cancel() on a cold engine when nothing is speaking (hurts some iOS builds)
   if (speechSynthesis.speaking || speechSynthesis.pending) {
     speechSynthesis.cancel()
   }
@@ -239,6 +246,7 @@ async function speakViaSynthesis(text: string): Promise<void> {
       if (settled) return
       settled = true
       window.clearInterval(resumeTimer)
+      resumePreviewSoon()
       resolve()
     }
 
@@ -247,6 +255,7 @@ async function speakViaSynthesis(text: string): Promise<void> {
       if (settled) return
       settled = true
       window.clearInterval(resumeTimer)
+      resumePreviewSoon()
       const err = event.error
       if (err === 'interrupted' || err === 'canceled') {
         resolve()
@@ -258,12 +267,12 @@ async function speakViaSynthesis(text: string): Promise<void> {
     speechSynthesis.speak(utter)
     speechSynthesis.resume()
 
-    // iOS may swallow speak() with no error — detect and fail over
     window.setTimeout(() => {
       if (settled) return
       if (!speechSynthesis.speaking && !speechSynthesis.pending) {
         settled = true
         window.clearInterval(resumeTimer)
+        resumePreviewSoon()
         reject(new Error('speech-not-started'))
       }
     }, 450)
@@ -276,14 +285,17 @@ function playUrl(url: string): Promise<void> {
     currentAudio = audio
     audio.onended = () => {
       currentAudio = null
+      resumePreviewSoon()
       resolve()
     }
     audio.onerror = () => {
       currentAudio = null
+      resumePreviewSoon()
       reject(new Error('無法播放音訊，請檢查網址或格式'))
     }
     void audio.play().catch((err: unknown) => {
       currentAudio = null
+      resumePreviewSoon()
       reject(err instanceof Error ? err : new Error('播放被瀏覽器阻擋，請先點一下畫面'))
     })
   })

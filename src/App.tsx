@@ -8,7 +8,7 @@ import {
   verifyAdminPassword,
 } from './lib/api'
 import { GestureMatcher } from './lib/matcher'
-import { isAudioUnlocked, runReaction, stopReactions, unlockAudio } from './lib/reactions'
+import { isAudioUnlocked, runReaction, setPreviewResumer, stopReactions, unlockAudio } from './lib/reactions'
 import {
   createId,
   loadAdminPassword,
@@ -165,7 +165,15 @@ export default function App() {
     handCount,
     startCamera,
     stopCamera,
+    resumePreview,
   } = useHandLandmarker(onFrame)
+
+  useEffect(() => {
+    setPreviewResumer(() => {
+      void resumePreview()
+    })
+    return () => setPreviewResumer(null)
+  }, [resumePreview])
 
   const ensureCamera = useCallback(async () => {
     if (cameraOn) return
@@ -176,8 +184,9 @@ export default function App() {
   /** iPhone/iPad 必須由使用者點擊才能解鎖語音 */
   const enableAudio = useCallback(async () => {
     await unlockAudio()
+    await resumePreview()
     setAudioReady(true)
-  }, [])
+  }, [resumePreview])
 
   const onStartListen = useCallback(async () => {
     stopReactions()
@@ -397,7 +406,7 @@ export default function App() {
                 void enableAudio()
                   .then(() => {
                     setAudioReady(true)
-                    flash('語音已啟用（應聽到「叮」）。可再做一次手勢')
+                    flash('語音已啟用。可再做一次手勢')
                   })
                   .catch(() => flash('無法啟用語音，請確認裝置未靜音'))
               }

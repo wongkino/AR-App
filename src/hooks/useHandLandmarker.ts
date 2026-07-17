@@ -27,6 +27,7 @@ type UseHandLandmarkerResult = {
   latestFrame: HandFrame | null
   startCamera: () => Promise<void>
   stopCamera: () => void
+  resumePreview: () => Promise<void>
 }
 
 function toLandmarks(raw: NormalizedLandmark[]): Landmark[] {
@@ -238,6 +239,21 @@ export function useHandLandmarker(
     setLatestFrame(null)
   }, [])
 
+  /** Re-play video + restart detect loop (iOS often pauses after TTS/beep). */
+  const resumePreview = useCallback(async () => {
+    const video = videoRef.current
+    if (!video || !streamRef.current) return
+    try {
+      if (video.paused) {
+        await video.play()
+      }
+    } catch {
+      // ignore autoplay race
+    }
+    cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(loop)
+  }, [loop])
+
   return {
     videoRef,
     canvasRef,
@@ -247,5 +263,6 @@ export function useHandLandmarker(
     latestFrame,
     startCamera,
     stopCamera,
+    resumePreview,
   }
 }
