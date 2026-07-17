@@ -6,21 +6,12 @@
 
 - MediaPipe Hand Landmarker 即時手部追蹤（手機 / 筆電瀏覽器）
 - 錄製手勢時間序列並以 DTW 比對
-- 觸發反應：Web Speech API 朗讀、播放遠端音訊 URL
-- 手勢資料存於本機 `localStorage`
+- 觸發反應：Web Speech API 朗讀（廣東話）、播放遠端音訊 URL
+- **Postgres 雲端同步**：用同步碼跨裝置共用手勢
 
-## 開始使用
+## Docker（建議）
 
-```bash
-npm install
-npm run dev
-```
-
-用瀏覽器開啟終端機顯示的本機網址，允許相機權限後即可操作。
-
-> 相機需要安全來源（`localhost` 或 HTTPS）。若要用手機連同一區網的筆電開發伺服器，請自行設定 HTTPS 或透過隧道。
-
-## Docker
+一次啟動前端 + API + Postgres：
 
 ```bash
 docker compose up --build -d
@@ -28,26 +19,64 @@ docker compose up --build -d
 
 開啟 http://localhost:8080/
 
+1. 在「雲端同步」按 **建立新同步碼**
+2. 把同步碼記下來，其他裝置輸入同一組碼即可
+3. 之後儲存／修改／刪除手勢會自動寫入資料庫
+
 ```bash
-# 停止
 docker compose down
 ```
 
-或直接用 Docker：
+### 使用 GitHub Actions 打包的映像
+
+`main` 推送後會自動建置並推到 GHCR：
+
+- `ghcr.io/wongkino/ar-app-web`
+- `ghcr.io/wongkino/ar-app-api`
+
+直接拉映像跑（不必本機 build）：
 
 ```bash
-docker build -t gesture-lab .
-docker run --rm -p 8080:80 gesture-lab
+docker compose pull
+docker compose up -d
 ```
+
+若套件是 private，先登入：
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+打 tag（例如 `v1.0.0`）也會產生對應版本標籤。
+
+## 本機開發
+
+需要先有 Postgres（或用 compose 只開資料庫）：
+
+```bash
+docker compose up -d db
+```
+
+```bash
+# API
+cd server && npm install && DATABASE_URL=postgres://gesture:gesture@localhost:5432/gesturelab npm run dev
+
+# 前端（另開終端）
+npm install && npm run dev
+```
+
+> 相機需要安全來源（`localhost` 或 HTTPS）。
 
 ## 使用流程
 
-1. 開啟相機
-2. 填寫手勢名稱與反應（朗讀 / 音訊網址）
-3. **開始錄製** → 做完手勢 → **停止並預覽** → **儲存手勢**
+1. （建議）建立或加入同步碼
+2. 開啟相機
+3. 填寫手勢名稱與反應 → **開始錄製** → **停止並預覽** → **儲存手勢**
 4. **開始監聽**，重複該手勢觸發反應
 
 ## 技術
 
 - Vite + React + TypeScript
 - `@mediapipe/tasks-vision` Hand Landmarker
+- Hono API + PostgreSQL
+- GitHub Actions → GHCR Docker images

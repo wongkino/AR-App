@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
+import { createWorkspace, fetchGestures, pushGestures, verifyWorkspace } from './lib/api'
 import { GestureMatcher } from './lib/matcher'
 import { runReaction, stopReactions } from './lib/reactions'
-import { createId, loadGestures, saveGestures } from './lib/storage'
+import {
+  createId,
+  loadGestures,
+  loadSyncKey,
+  saveGesturesLocal,
+  saveSyncKey,
+} from './lib/storage'
 import type { AppMode, HandFrame, Reaction, SavedGesture } from './types'
 import './App.css'
 
@@ -11,6 +18,8 @@ const DEFAULT_REACTION: Reaction = {
   kind: 'speak',
   text: '哈囉，手勢認到喇',
 }
+
+type SyncStatus = 'idle' | 'syncing' | 'ok' | 'error' | 'offline'
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('idle')
@@ -22,12 +31,18 @@ export default function App() {
   const [lastTriggered, setLastTriggered] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
+  const [syncKey, setSyncKey] = useState<string | null>(() => loadSyncKey())
+  const [syncInput, setSyncInput] = useState('')
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
+  const syncKeyRef = useRef(syncKey)
   const recordBuf = useRef<HandFrame[]>([])
   const matcherRef = useRef(new GestureMatcher())
   const triggeringRef = useRef(false)
+  const skipNextPush = useRef(false)
+  const pushTimer = useRef<number | null>(null)
 
   useEffect(() => {
     modeRef.current = mode
@@ -35,8 +50,77 @@ export default function App() {
 
   useEffect(() => {
     gesturesRef.current = gestures
-    saveGestures(gestures)
+    saveGesturesLocal(gestures)
   }, [gestures])
+
+  useEffect(() => {
+    syncKeyRef.current = syncKey
+    saveSyncKey(syncKey)
+  }, [syncKey])
+
+  const flash = useCallback((msg: string) => {
+    setStatusMessage(msg)
+    window.setTimeout(() => setStatusMessage(null), 2800)
+  }, [])
+
+  const pushToCloud = useCallback(
+    async (nextGestures: SavedGesture[], key: string) => {
+      setSyncStatus('syncing')
+      try {
+        await pushGestures(key, nextGestures)
+        setSyncStatus('ok')
+      } catch {
+        setSyncStatus('error')
+      }
+    },
+    [],
+  )
+
+  // Debounced cloud sync whenever gestures change
+  useEffect(() => {
+    if (!syncKey) return
+    if (skipNextPush.current) {
+      skipNextPush.current = false
+      return
+    }
+    if (pushTimer.current) window.clearTimeout(pushTimer.current)
+    pushTimer.current = window.setTimeout(() => {
+      void pushToCloud(gestures, syncKey)
+    }, 600)
+    return () => {
+      if (pushTimer.current) window.clearTimeout(pushTimer.current)
+    }
+  }, [gestures, syncKey, pushToCloud])
+
+  // Load from DB on mount / when sync key set
+  useEffect(() => {
+    if (!syncKey) {
+      setSyncStatus('offline')
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      setSyncStatus('syncing')
+      try {
+        await verifyWorkspace(syncKey)
+        const remote = await fetchGestures(syncKey)
+        if (cancelled) return
+        skipNextPush.current = true
+        setGestures(remote)
+        setSyncStatus('ok')
+      } catch {
+        if (!cancelled) {
+          setSyncStatus('error')
+          flash('無法連接資料庫，暫用本機資料')
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [syncKey, flash])
 
   const onFrame = useCallback((frame: HandFrame | null) => {
     if (!frame) return
@@ -84,11 +168,6 @@ export default function App() {
     await startCamera()
     setCameraOn(true)
   }, [cameraOn, startCamera])
-
-  const flash = useCallback((msg: string) => {
-    setStatusMessage(msg)
-    window.setTimeout(() => setStatusMessage(null), 2800)
-  }, [])
 
   const onStartRecord = useCallback(async () => {
     stopReactions()
@@ -145,7 +224,7 @@ export default function App() {
     setPendingFrames(null)
     setDraftName('')
     setDraftReaction(DEFAULT_REACTION)
-    flash(`已儲存「${name}」`)
+    flash(syncKeyRef.current ? `已儲存「${name}」並同步到資料庫` : `已儲存「${name}」（僅本機，請設定同步碼）`)
   }, [pendingFrames, draftName, draftReaction, gestures.length, flash])
 
   const onStartListen = useCallback(async () => {
@@ -188,6 +267,63 @@ export default function App() {
     [flash],
   )
 
+  const onCreateSync = useCallback(async () => {
+    setSyncStatus('syncing')
+    try {
+      const { syncKey: key } = await createWorkspace()
+      // Upload current local gestures to the new workspace
+      await pushGestures(key, gesturesRef.current)
+      setSyncKey(key)
+      setSyncStatus('ok')
+      flash(`已建立同步碼 ${key}`)
+    } catch (err) {
+      setSyncStatus('error')
+      flash(err instanceof Error ? err.message : '建立同步失敗')
+    }
+  }, [flash])
+
+  const onJoinSync = useCallback(async () => {
+    const key = syncInput.trim().toUpperCase()
+    if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(key)) {
+      flash('同步碼格式應為 XXX-XXX-XXX')
+      return
+    }
+    setSyncStatus('syncing')
+    try {
+      await verifyWorkspace(key)
+      const remote = await fetchGestures(key)
+      skipNextPush.current = true
+      setGestures(remote)
+      setSyncKey(key)
+      setSyncStatus('ok')
+      flash(`已加入同步 ${key}`)
+    } catch (err) {
+      setSyncStatus('error')
+      flash(err instanceof Error ? err.message : '加入同步失敗')
+    }
+  }, [syncInput, flash])
+
+  const onLeaveSync = useCallback(() => {
+    setSyncKey(null)
+    setSyncStatus('offline')
+    flash('已解除雲端同步（本機資料仍保留）')
+  }, [flash])
+
+  const onPullSync = useCallback(async () => {
+    if (!syncKey) return
+    setSyncStatus('syncing')
+    try {
+      const remote = await fetchGestures(syncKey)
+      skipNextPush.current = true
+      setGestures(remote)
+      setSyncStatus('ok')
+      flash('已從資料庫重新下載')
+    } catch (err) {
+      setSyncStatus('error')
+      flash(err instanceof Error ? err.message : '下載失敗')
+    }
+  }, [syncKey, flash])
+
   useEffect(() => {
     return () => {
       stopCamera()
@@ -203,7 +339,7 @@ export default function App() {
           {!cameraOn && (
             <div className="camera-gate">
               <h2>開啟鏡頭開始</h2>
-              <p>需要相機權限以辨識手勢。資料只存在本機瀏覽器。</p>
+              <p>設定同步碼後，手勢會存進資料庫，換裝置也能用。</p>
               <button
                 type="button"
                 className="primary"
@@ -246,6 +382,14 @@ export default function App() {
         onDelete={onDelete}
         onTest={onTest}
         onUpdate={onUpdate}
+        syncKey={syncKey}
+        syncStatus={syncStatus}
+        syncInput={syncInput}
+        onSyncInputChange={setSyncInput}
+        onCreateSync={() => void onCreateSync()}
+        onJoinSync={() => void onJoinSync()}
+        onLeaveSync={onLeaveSync}
+        onPullSync={() => void onPullSync()}
       />
     </div>
   )

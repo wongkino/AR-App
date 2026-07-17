@@ -1,7 +1,38 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gesture
+      POSTGRES_PASSWORD: gesture
+      POSTGRES_DB: gesturelab
+    volumes:
+      - gesture_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gesture -d gesturelab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE:-ghcr.io/wongkino/ar-app-api:latest}
+    build: ./server
+    environment:
+      DATABASE_URL: postgres://gesture:gesture@db:5432/gesturelab
+      PORT: "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
+    image: ${WEB_IMAGE:-ghcr.io/wongkino/ar-app-web:latest}
     build: .
-    image: gesture-lab:latest
     ports:
       - "8080:80"
+    depends_on:
+      - api
     restart: unless-stopped
+
+volumes:
+  gesture_pg:

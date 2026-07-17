@@ -9,3 +9,4 @@ dist
 .env
 .env.*
 npm-debug.log*
+server
