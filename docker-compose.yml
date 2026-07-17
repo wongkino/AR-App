@@ -24,9 +24,9 @@ services:
       PORT: "8080"
       STATIC_DIR: /app/public
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-gesture-admin}
+    # Portainer / compose v1 只接受 list 形式
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     restart: unless-stopped
 
 volumes:
