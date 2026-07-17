@@ -27,7 +27,9 @@ docker compose up --build -d
 ```
 
 開啟 http://localhost:8080/  
-詳細步驟見 [docs/USER.md](./docs/USER.md)。
+
+- **一般**：加入同步碼 → 監聽手勢  
+- **管理員**：密碼解鎖後才能錄製／儲存（預設 `gesture-admin`，可用 `ADMIN_PASSWORD` 改）
 
 ```bash
 docker compose down

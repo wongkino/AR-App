@@ -23,6 +23,7 @@ services:
       DATABASE_URL: postgres://gesture:gesture@db:5432/gesturelab
       PORT: "8080"
       STATIC_DIR: /app/public
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-gesture-admin}
     depends_on:
       db:
         condition: service_healthy

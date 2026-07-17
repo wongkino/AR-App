@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
-import { createWorkspace, fetchGestures, pushGestures, verifyWorkspace } from './lib/api'
+import {
+  createWorkspace,
+  fetchGestures,
+  pushGestures,
+  setAdminPassword,
+  verifyAdminPassword,
+  verifyWorkspace,
+} from './lib/api'
 import { GestureMatcher } from './lib/matcher'
 import { runReaction, stopReactions } from './lib/reactions'
 import {
   createId,
+  loadAdminPassword,
   loadGestures,
   loadSyncKey,
+  saveAdminPassword,
   saveGesturesLocal,
   saveSyncKey,
 } from './lib/storage'
@@ -34,10 +43,13 @@ export default function App() {
   const [syncKey, setSyncKey] = useState<string | null>(() => loadSyncKey())
   const [syncInput, setSyncInput] = useState('')
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  const [canEdit, setCanEdit] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
   const syncKeyRef = useRef(syncKey)
+  const canEditRef = useRef(canEdit)
   const recordBuf = useRef<HandFrame[]>([])
   const matcherRef = useRef(new GestureMatcher())
   const triggeringRef = useRef(false)
@@ -58,6 +70,26 @@ export default function App() {
     saveSyncKey(syncKey)
   }, [syncKey])
 
+  useEffect(() => {
+    canEditRef.current = canEdit
+  }, [canEdit])
+
+  // Restore admin session within the same browser tab
+  useEffect(() => {
+    const saved = loadAdminPassword()
+    if (!saved) return
+    ;(async () => {
+      try {
+        await verifyAdminPassword(saved)
+        setAdminPassword(saved)
+        setCanEdit(true)
+      } catch {
+        saveAdminPassword(null)
+        setAdminPassword(null)
+      }
+    })()
+  }, [])
+
   const flash = useCallback((msg: string) => {
     setStatusMessage(msg)
     window.setTimeout(() => setStatusMessage(null), 2800)
@@ -65,6 +97,7 @@ export default function App() {
 
   const pushToCloud = useCallback(
     async (nextGestures: SavedGesture[], key: string) => {
+      if (!canEditRef.current) return
       setSyncStatus('syncing')
       try {
         await pushGestures(key, nextGestures)
@@ -76,9 +109,9 @@ export default function App() {
     [],
   )
 
-  // Debounced cloud sync whenever gestures change
+  // Debounced cloud sync — editors only
   useEffect(() => {
-    if (!syncKey) return
+    if (!syncKey || !canEdit) return
     if (skipNextPush.current) {
       skipNextPush.current = false
       return
@@ -90,9 +123,8 @@ export default function App() {
     return () => {
       if (pushTimer.current) window.clearTimeout(pushTimer.current)
     }
-  }, [gestures, syncKey, pushToCloud])
+  }, [gestures, syncKey, canEdit, pushToCloud])
 
-  // Load from DB on mount / when sync key set
   useEffect(() => {
     if (!syncKey) {
       setSyncStatus('offline')
@@ -126,6 +158,7 @@ export default function App() {
     if (!frame) return
 
     if (modeRef.current === 'recording') {
+      if (!canEditRef.current) return
       recordBuf.current.push(frame)
       setRecordingCount(recordBuf.current.length)
       return
@@ -169,7 +202,41 @@ export default function App() {
     setCameraOn(true)
   }, [cameraOn, startCamera])
 
+  const onUnlock = useCallback(async () => {
+    const password = passwordInput.trim()
+    if (!password) {
+      flash('請輸入管理密碼')
+      return
+    }
+    try {
+      await verifyAdminPassword(password)
+      setAdminPassword(password)
+      saveAdminPassword(password)
+      setCanEdit(true)
+      setPasswordInput('')
+      flash('已解鎖編輯模式')
+    } catch (err) {
+      flash(err instanceof Error ? err.message : '密碼錯誤')
+    }
+  }, [passwordInput, flash])
+
+  const onLock = useCallback(() => {
+    setAdminPassword(null)
+    saveAdminPassword(null)
+    setCanEdit(false)
+    setPendingFrames(null)
+    if (modeRef.current === 'recording') {
+      recordBuf.current = []
+      setMode('idle')
+    }
+    flash('已鎖定，現在只能監聽')
+  }, [flash])
+
   const onStartRecord = useCallback(async () => {
+    if (!canEditRef.current) {
+      flash('請先輸入管理密碼')
+      return
+    }
     stopReactions()
     matcherRef.current.clear()
     setLastTriggered(null)
@@ -195,6 +262,10 @@ export default function App() {
   }, [flash])
 
   const onSave = useCallback(() => {
+    if (!canEditRef.current) {
+      flash('請先輸入管理密碼')
+      return
+    }
     if (!pendingFrames || pendingFrames.length < 10) {
       flash('請先錄製一段手勢')
       return
@@ -244,12 +315,14 @@ export default function App() {
   }, [flash])
 
   const onDelete = useCallback((id: string) => {
+    if (!canEditRef.current) return
     setGestures((prev) => prev.filter((g) => g.id !== id))
     flash('已刪除手勢')
   }, [flash])
 
   const onUpdate = useCallback(
     (id: string, patch: { name: string; reaction: Reaction }) => {
+      if (!canEditRef.current) return
       setGestures((prev) =>
         prev.map((g) => (g.id === id ? { ...g, name: patch.name, reaction: patch.reaction } : g)),
       )
@@ -268,10 +341,13 @@ export default function App() {
   )
 
   const onCreateSync = useCallback(async () => {
+    if (!canEditRef.current) {
+      flash('請先輸入管理密碼')
+      return
+    }
     setSyncStatus('syncing')
     try {
       const { syncKey: key } = await createWorkspace()
-      // Upload current local gestures to the new workspace
       await pushGestures(key, gesturesRef.current)
       setSyncKey(key)
       setSyncStatus('ok')
@@ -304,6 +380,7 @@ export default function App() {
   }, [syncInput, flash])
 
   const onLeaveSync = useCallback(() => {
+    if (!canEditRef.current) return
     setSyncKey(null)
     setSyncStatus('offline')
     flash('已解除雲端同步（本機資料仍保留）')
@@ -339,7 +416,7 @@ export default function App() {
           {!cameraOn && (
             <div className="camera-gate">
               <h2>開啟鏡頭開始</h2>
-              <p>設定同步碼後，手勢會存進資料庫，換裝置也能用。</p>
+              <p>一般可直接監聽手勢；儲存／錄製需管理密碼。</p>
               <button
                 type="button"
                 className="primary"
@@ -368,6 +445,11 @@ export default function App() {
         handCount={handCount}
         lastTriggered={lastTriggered}
         statusMessage={statusMessage}
+        canEdit={canEdit}
+        passwordInput={passwordInput}
+        onPasswordInputChange={setPasswordInput}
+        onUnlock={() => void onUnlock()}
+        onLock={onLock}
         draftName={draftName}
         draftReaction={draftReaction}
         onDraftNameChange={setDraftName}

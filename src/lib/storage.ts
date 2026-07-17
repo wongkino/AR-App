@@ -2,6 +2,7 @@ import type { SavedGesture } from '../types'
 
 const GESTURES_KEY = 'gesture-lab:gestures'
 const SYNC_KEY = 'gesture-lab:sync-key'
+const ADMIN_SESSION_KEY = 'gesture-lab:admin-password'
 
 export function loadGestures(): SavedGesture[] {
   try {
@@ -32,4 +33,16 @@ export function saveSyncKey(syncKey: string | null): void {
 
 export function createId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function loadAdminPassword(): string | null {
+  return sessionStorage.getItem(ADMIN_SESSION_KEY)
+}
+
+export function saveAdminPassword(password: string | null): void {
+  if (!password) {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY)
+    return
+  }
+  sessionStorage.setItem(ADMIN_SESSION_KEY, password)
 }

@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import type { Context, Next } from 'hono'
 import { initDb, pool, randomUUID } from './db.js'
 
 type GestureBody = {
@@ -14,6 +15,8 @@ type GestureBody = {
   createdAt: number
 }
 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'gesture-admin'
+
 const app = new Hono()
 
 app.use(
@@ -21,10 +24,29 @@ app.use(
   cors({
     origin: '*',
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'X-Admin-Password'],
   }),
 )
 
+async function requireAdmin(c: Context, next: Next) {
+  const provided = c.req.header('X-Admin-Password') ?? ''
+  if (!ADMIN_PASSWORD || provided !== ADMIN_PASSWORD) {
+    return c.json({ error: '需要正確的管理密碼才能儲存或修改手勢' }, 401)
+  }
+  await next()
+}
+
 app.get('/api/health', (c) => c.json({ ok: true }))
+
+/** Verify admin password without mutating data. */
+app.post('/api/auth/verify', async (c) => {
+  const body = await c.req.json<{ password?: string }>().catch(() => ({} as { password?: string }))
+  const password = body.password ?? c.req.header('X-Admin-Password') ?? ''
+  if (!password || password !== ADMIN_PASSWORD) {
+    return c.json({ ok: false, error: '密碼錯誤' }, 401)
+  }
+  return c.json({ ok: true })
+})
 
 function makeSyncKey(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -42,7 +64,7 @@ async function getWorkspaceByKey(syncKey: string) {
   return result.rows[0] ?? null
 }
 
-app.post('/api/workspaces', async (c) => {
+app.post('/api/workspaces', requireAdmin, async (c) => {
   for (let i = 0; i < 8; i++) {
     const syncKey = makeSyncKey()
     try {
@@ -94,9 +116,8 @@ app.get('/api/workspaces/:syncKey/gestures', async (c) => {
   })
 })
 
-/** Replace all gestures for a workspace (full sync). */
-app.put('/api/workspaces/:syncKey/gestures', async (c) => {
-  const workspace = await getWorkspaceByKey(c.req.param('syncKey'))
+app.put('/api/workspaces/:syncKey/gestures', requireAdmin, async (c) => {
+  const workspace = await getWorkspaceByKey(c.req.param('syncKey') ?? '')
   if (!workspace) return c.json({ error: '找不到此同步碼' }, 404)
 
   const body = await c.req.json<{ gestures?: GestureBody[] }>()
@@ -139,18 +160,17 @@ app.put('/api/workspaces/:syncKey/gestures', async (c) => {
   }
 })
 
-app.delete('/api/workspaces/:syncKey/gestures/:gestureId', async (c) => {
-  const workspace = await getWorkspaceByKey(c.req.param('syncKey'))
+app.delete('/api/workspaces/:syncKey/gestures/:gestureId', requireAdmin, async (c) => {
+  const workspace = await getWorkspaceByKey(c.req.param('syncKey') ?? '')
   if (!workspace) return c.json({ error: '找不到此同步碼' }, 404)
 
   await pool.query('DELETE FROM gestures WHERE workspace_id = $1 AND id = $2', [
     workspace.id,
-    c.req.param('gestureId'),
+    c.req.param('gestureId') ?? '',
   ])
   return c.json({ ok: true })
 })
 
-/** Serve Vite build (web + api in one process) when public/ exists. */
 const staticRoot = process.env.STATIC_DIR ?? join(process.cwd(), 'public')
 if (existsSync(staticRoot)) {
   app.use('/*', serveStatic({ root: staticRoot }))

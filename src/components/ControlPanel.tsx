@@ -7,6 +7,11 @@ type Props = {
   handCount: number
   lastTriggered: string | null
   statusMessage: string | null
+  canEdit: boolean
+  passwordInput: string
+  onPasswordInputChange: (v: string) => void
+  onUnlock: () => void
+  onLock: () => void
   draftName: string
   draftReaction: Reaction
   onDraftNameChange: (v: string) => void
@@ -115,6 +120,11 @@ export function ControlPanel({
   handCount,
   lastTriggered,
   statusMessage,
+  canEdit,
+  passwordInput,
+  onPasswordInputChange,
+  onUnlock,
+  onLock,
   draftName,
   draftReaction,
   onDraftNameChange,
@@ -177,7 +187,9 @@ export function ControlPanel({
       <header className="panel-brand">
         <p className="eyebrow">Gesture Lab</p>
         <h1>用手勢觸發反應</h1>
-        <p className="lede">支援單手或雙手。錄下手勢，之後再做一次就能播歌或朗讀文字。</p>
+        <p className="lede">
+          一般模式只能監聽。輸入管理密碼後才能錄製與儲存手勢。
+        </p>
       </header>
 
       <div className="status-row" aria-live="polite">
@@ -195,6 +207,9 @@ export function ControlPanel({
               ? '監聽中'
               : '待命'}
         </span>
+        <span className={`pill ${canEdit ? 'on' : ''}`}>
+          {canEdit ? '編輯已解鎖' : '僅監聽'}
+        </span>
       </div>
 
       {statusMessage && <p className="flash">{statusMessage}</p>}
@@ -203,13 +218,48 @@ export function ControlPanel({
       )}
 
       <section className="block">
+        <h2>管理密碼</h2>
+        {canEdit ? (
+          <>
+            <p className="hint">已解鎖錄製／儲存／修改。關閉分頁會自動鎖定。</p>
+            <div className="actions">
+              <button type="button" className="danger" onClick={onLock}>
+                鎖定編輯
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="hint">輸入密碼後才能儲存手勢。預設密碼見部署設定（ADMIN_PASSWORD）。</p>
+            <label className="field">
+              <span>密碼</span>
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => onPasswordInputChange(e.target.value)}
+                placeholder="管理密碼"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onUnlock()
+                }}
+              />
+            </label>
+            <div className="actions">
+              <button type="button" className="primary" onClick={onUnlock}>
+                解鎖編輯
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="block">
         <h2>雲端同步</h2>
         {syncKey ? (
           <>
             <p className="hint">
               同步碼：<strong className="sync-code">{syncKey}</strong>
               <br />
-              在其他裝置輸入同一組碼即可共用手勢。
+              在其他裝置輸入同一組碼即可監聽同一組手勢。
             </p>
             <span
               className={`pill ${syncStatus === 'ok' ? 'on' : ''} ${syncStatus === 'error' ? 'mode-recording' : ''}`}
@@ -228,14 +278,16 @@ export function ControlPanel({
               <button type="button" className="secondary" onClick={onPullSync}>
                 重新下載
               </button>
-              <button type="button" className="danger" onClick={onLeaveSync}>
-                解除同步
-              </button>
+              {canEdit && (
+                <button type="button" className="danger" onClick={onLeaveSync}>
+                  解除同步
+                </button>
+              )}
             </div>
           </>
         ) : (
           <>
-            <p className="hint">建立或輸入同步碼，手勢會存進 Postgres，換裝置也能用。</p>
+            <p className="hint">輸入同步碼即可下載並監聽手勢。建立新同步碼需管理密碼。</p>
             <label className="field">
               <span>同步碼</span>
               <input
@@ -249,51 +301,14 @@ export function ControlPanel({
               <button type="button" className="primary" onClick={onJoinSync}>
                 加入同步
               </button>
-              <button type="button" className="secondary" onClick={onCreateSync}>
-                建立新同步碼
-              </button>
+              {canEdit && (
+                <button type="button" className="secondary" onClick={onCreateSync}>
+                  建立新同步碼
+                </button>
+              )}
             </div>
           </>
         )}
-      </section>
-
-      <section className="block">
-        <h2>錄製手勢</h2>
-        <label className="field">
-          <span>名稱</span>
-          <input
-            value={draftName}
-            onChange={(e) => onDraftNameChange(e.target.value)}
-            placeholder="例如：揮手打招呼"
-            disabled={mode === 'recording'}
-          />
-        </label>
-
-        <ReactionEditor
-          value={draftReaction}
-          onChange={onDraftReactionChange}
-          disabled={mode === 'recording'}
-        />
-
-        <div className="actions">
-          {mode !== 'recording' ? (
-            <button type="button" className="primary" onClick={onStartRecord}>
-              開始錄製
-            </button>
-          ) : (
-            <button type="button" className="danger" onClick={onStopRecord}>
-              停止並預覽
-            </button>
-          )}
-          <button
-            type="button"
-            className="secondary"
-            disabled={!canSave || mode === 'recording'}
-            onClick={onSave}
-          >
-            儲存手勢
-          </button>
-        </div>
       </section>
 
       <section className="block">
@@ -317,14 +332,57 @@ export function ControlPanel({
         </div>
       </section>
 
+      {canEdit && (
+        <section className="block">
+          <h2>錄製手勢</h2>
+          <label className="field">
+            <span>名稱</span>
+            <input
+              value={draftName}
+              onChange={(e) => onDraftNameChange(e.target.value)}
+              placeholder="例如：揮手打招呼"
+              disabled={mode === 'recording'}
+            />
+          </label>
+
+          <ReactionEditor
+            value={draftReaction}
+            onChange={onDraftReactionChange}
+            disabled={mode === 'recording'}
+          />
+
+          <div className="actions">
+            {mode !== 'recording' ? (
+              <button type="button" className="primary" onClick={onStartRecord}>
+                開始錄製
+              </button>
+            ) : (
+              <button type="button" className="danger" onClick={onStopRecord}>
+                停止並預覽
+              </button>
+            )}
+            <button
+              type="button"
+              className="secondary"
+              disabled={!canSave || mode === 'recording'}
+              onClick={onSave}
+            >
+              儲存手勢
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="block">
         <h2>已儲存（{gestures.length}）</h2>
         {gestures.length === 0 ? (
-          <p className="hint">還沒有手勢。先錄一段並儲存。</p>
+          <p className="hint">
+            {canEdit ? '還沒有手勢。先錄一段並儲存。' : '尚無手勢。請先加入同步碼下載，或請管理員錄製。'}
+          </p>
         ) : (
           <ul className="gesture-list">
             {gestures.map((g) => {
-              const isEditing = editingId === g.id
+              const isEditing = canEdit && editingId === g.id
               return (
                 <li key={g.id} className={isEditing ? 'editing' : ''}>
                   {isEditing ? (
@@ -345,7 +403,13 @@ export function ControlPanel({
                         <button type="button" className="secondary" onClick={cancelEdit}>
                           取消
                         </button>
-                        <button type="button" className="secondary" onClick={() => onTest({ ...g, name: editName, reaction: editReaction })}>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() =>
+                            onTest({ ...g, name: editName, reaction: editReaction })
+                          }
+                        >
                           試播
                         </button>
                       </div>
@@ -359,19 +423,23 @@ export function ControlPanel({
                         </span>
                       </div>
                       <div className="row-actions">
-                        <button type="button" onClick={() => startEdit(g)}>
-                          改反應
-                        </button>
+                        {canEdit && (
+                          <button type="button" onClick={() => startEdit(g)}>
+                            改反應
+                          </button>
+                        )}
                         <button type="button" onClick={() => onTest(g)}>
                           試播
                         </button>
-                        <button
-                          type="button"
-                          className="danger-text"
-                          onClick={() => onDelete(g.id)}
-                        >
-                          刪除
-                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            className="danger-text"
+                            onClick={() => onDelete(g.id)}
+                          >
+                            刪除
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
