@@ -138,6 +138,8 @@ export default function App() {
     if (modeRef.current === 'listening') {
       const matcher = matcherRef.current
       matcher.push(frame)
+      // Only block re-entrancy while starting a reaction; do NOT hold this for
+      // the whole TTS duration (iOS often never fires audio `ended`).
       if (triggeringRef.current) return
       const match = matcher.tryMatch(gesturesRef.current)
       if (!match) return
@@ -147,6 +149,11 @@ export default function App() {
 
       setLastTriggered(`${gesture.name}（${Math.round(match.score * 100)}%）`)
       triggeringRef.current = true
+      // Matcher already enforces 2.2s cooldown; release the lock quickly so a
+      // hung audio promise can never permanently disable triggers.
+      window.setTimeout(() => {
+        triggeringRef.current = false
+      }, 400)
       void runReaction(gesture.reaction)
         .catch((err: unknown) => {
           setStatusMessage(err instanceof Error ? err.message : '觸發反應失敗')
