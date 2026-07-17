@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.4] - 2026-07-17
+
+- Merge pull request #1 from wongkino/cursor/multiplayer-fight-game-c018 (67251bd)
+- Add multiplayer gesture fighting game at /fight (4eb0c76)
+
 ## [v0.6.3] - 2026-07-17
 
 - fix: play gesture TTS via unlocked AudioContext/player (88c79df)
