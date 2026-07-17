@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.2.1] - 2026-07-17
+
+- fix: use list-form depends_on for Portainer compose parser (d1f663c)
+
 ## [v0.2.0] - 2026-07-17
 
 - feat: require admin password to save gestures (722ba2b)
