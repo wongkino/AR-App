@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server'
+import { createNodeWebSocket } from '@hono/node-ws'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -6,6 +7,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Context, Next } from 'hono'
 import { initDb, pool } from './db.js'
+import { gameHub } from './game.js'
 
 type GestureBody = {
   id: string
@@ -18,6 +20,7 @@ type GestureBody = {
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'gesture-admin'
 
 const app = new Hono()
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app })
 
 app.use(
   '*',
@@ -37,6 +40,21 @@ async function requireAdmin(c: Context, next: Next) {
 }
 
 app.get('/api/health', (c) => c.json({ ok: true }))
+
+app.get(
+  '/ws/fight',
+  upgradeWebSocket(() => ({
+    onOpen(_event, ws) {
+      gameHub.handleOpen(ws)
+    },
+    onMessage(event, ws) {
+      gameHub.handleMessage(ws, String(event.data))
+    },
+    onClose(_event, ws) {
+      gameHub.handleClose(ws)
+    },
+  })),
+)
 
 app.post('/api/auth/verify', async (c) => {
   const body = await c.req.json<{ password?: string }>().catch(() => ({} as { password?: string }))
@@ -240,4 +258,5 @@ console.log(
     ? `Gesture Lab (web+api) listening on :${port}`
     : `Gesture Lab API listening on :${port}`,
 )
-serve({ fetch: app.fetch, port })
+const server = serve({ fetch: app.fetch, port })
+injectWebSocket(server)

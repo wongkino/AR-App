@@ -195,6 +195,9 @@ export function ControlPanel({
         <p className="lede">
           任何人都可以錄製本機試用手勢；管理員解鎖後才能寫入共用庫給所有人用。
         </p>
+        <p className="hint">
+          <a href="/fight">進入手勢格鬥（多人對戰）→</a>
+        </p>
       </header>
 
       <div className="status-row" aria-live="polite">
