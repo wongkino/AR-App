@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.3] - 2026-07-17
+
+- style: apply square aspect-ratio to viewport on all breakpoints (ee522e0)
+
 ## [v0.4.2] - 2026-07-17
 
 - style: make camera viewport a square frame (92fdbc3)
