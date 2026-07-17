@@ -495,7 +495,8 @@ button:disabled {
   }
 
   .viewport {
-    min-height: min(48dvh, 420px);
+    width: min(100%, 70dvw, 560px);
+    aspect-ratio: 1 / 1;
     border-radius: var(--radius);
   }
 
@@ -515,6 +516,7 @@ button:disabled {
 
 @media (max-width: 900px) {
   .viewport {
-    min-height: min(58dvh, 480px);
+    width: min(100%, 92dvw);
+    aspect-ratio: 1 / 1;
   }
 }
