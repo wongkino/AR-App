@@ -147,7 +147,7 @@ export function RpsLobby({
               <h2>手勢配置</h2>
               <p className="rps-muted">為包（拳）、剪、揼各選一個手勢。建議錄製握拳、剪刀手、張開手掌。</p>
               {gestures.length < 3 ? (
-                <p className="rps-warn">手勢不足 3 個，請先到首頁錄製包、剪、揼手勢。</p>
+                <p className="rps-warn">手勢不足 3 個，請管理員到設定頁錄製包、剪、揼手勢。</p>
               ) : (
                 <div className="rps-loadout">
                   {MOVES.map((move) => (

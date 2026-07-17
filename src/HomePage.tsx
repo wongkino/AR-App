@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { AdminLoginModal } from './components/AdminLoginModal'
 import './HomePage.css'
 
 const GAMES = [
@@ -18,12 +20,14 @@ const GAMES = [
 ] as const
 
 export default function HomePage() {
+  const [showLogin, setShowLogin] = useState(false)
+
   return (
     <div className="home">
       <header className="home-header">
         <p className="home-kicker">Gesture Lab</p>
         <h1>選擇遊戲</h1>
-        <p className="home-lede">用手勢玩多人遊戲。先喺設定頁錄製手勢，再開局對戰。</p>
+        <p className="home-lede">用手勢玩多人遊戲。管理員可先設定手勢庫，再開局對戰。</p>
       </header>
 
       <div className="home-grid">
@@ -41,16 +45,18 @@ export default function HomePage() {
       </div>
 
       <footer className="home-footer">
-        <a className="home-settings" href="/settings">
+        <button type="button" className="home-settings" onClick={() => setShowLogin(true)}>
           <span className="home-settings-icon" aria-hidden>
             ⚙️
           </span>
           <span>
             <strong>設定</strong>
-            <small>錄製手勢、管理資料庫、測試反應</small>
+            <small>管理員登入後管理手勢庫</small>
           </span>
-        </a>
+        </button>
       </footer>
+
+      <AdminLoginModal open={showLogin} onClose={() => setShowLogin(false)} />
     </div>
   )
 }
