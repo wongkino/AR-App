@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.2] - 2026-07-17
+
+- fix: keep camera RAF alive when audio pauses iOS video (900d360)
+
 ## [v0.5.1] - 2026-07-17
 
 - fix: avoid freezing camera when unlocking audio on iOS (7759c2f)
