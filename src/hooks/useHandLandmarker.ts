@@ -24,7 +24,6 @@ type UseHandLandmarkerResult = {
   ready: boolean
   error: string | null
   handCount: number
-  latestFrame: HandFrame | null
   startCamera: () => Promise<void>
   stopCamera: () => void
   resumePreview: () => Promise<void>
@@ -50,11 +49,13 @@ export function useHandLandmarker(
   const streamRef = useRef<MediaStream | null>(null)
   const onFrameRef = useRef(onFrame)
   const lastTsRef = useRef(0)
+  const handCountRef = useRef(0)
+  const runningRef = useRef(false)
+  const loopRef = useRef<() => void>(() => undefined)
 
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [handCount, setHandCount] = useState(0)
-  const [latestFrame, setLatestFrame] = useState<HandFrame | null>(null)
 
   useEffect(() => {
     onFrameRef.current = onFrame
@@ -66,17 +67,33 @@ export function useHandLandmarker(
     async function init() {
       try {
         const vision = await FilesetResolver.forVisionTasks(WASM_URL)
-        const landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: MODEL_URL,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: 0.6,
-          minHandPresenceConfidence: 0.6,
-          minTrackingConfidence: 0.5,
-        })
+        // Prefer GPU, fall back to CPU if GPU init fails (common on some iOS WebViews)
+        let landmarker: HandLandmarker
+        try {
+          landmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: MODEL_URL,
+              delegate: 'GPU',
+            },
+            runningMode: 'VIDEO',
+            numHands: 2,
+            minHandDetectionConfidence: 0.6,
+            minHandPresenceConfidence: 0.6,
+            minTrackingConfidence: 0.5,
+          })
+        } catch {
+          landmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: MODEL_URL,
+              delegate: 'CPU',
+            },
+            runningMode: 'VIDEO',
+            numHands: 2,
+            minHandDetectionConfidence: 0.6,
+            minHandPresenceConfidence: 0.6,
+            minTrackingConfidence: 0.5,
+          })
+        }
         if (cancelled) {
           landmarker.close()
           return
@@ -94,6 +111,7 @@ export function useHandLandmarker(
 
     return () => {
       cancelled = true
+      runningRef.current = false
       cancelAnimationFrame(rafRef.current)
       landmarkerRef.current?.close()
       landmarkerRef.current = null
@@ -144,7 +162,6 @@ export function useHandLandmarker(
           ctx.fill()
         }
 
-        // Label near wrist
         ctx.font = '600 14px Outfit, sans-serif'
         ctx.fillStyle = colors.fill
         const tag = label === 'Left' ? 'L' : label === 'Right' ? 'R' : '?'
@@ -155,53 +172,81 @@ export function useHandLandmarker(
   )
 
   const loop = useCallback(() => {
+    if (!runningRef.current) return
+
     const video = videoRef.current
     const landmarker = landmarkerRef.current
-    if (!video || !landmarker || video.readyState < 2) {
-      rafRef.current = requestAnimationFrame(loop)
-      return
+
+    // Always schedule the next frame first-path via finally so one throw
+    // can never permanently kill the monitor loop.
+    try {
+      if (!video || !landmarker) {
+        return
+      }
+
+      // iOS often pauses <video> when any audio/TTS starts — that freezes the
+      // preview even if RAF keeps running. Re-play aggressively.
+      if (video.paused && streamRef.current) {
+        void video.play().catch(() => undefined)
+      }
+
+      if (video.readyState < 2) {
+        return
+      }
+
+      let ts = performance.now()
+      if (ts <= lastTsRef.current) ts = lastTsRef.current + 1
+      lastTsRef.current = ts
+
+      const result = landmarker.detectForVideo(video, ts)
+      const count = result.landmarks.length
+
+      if (count !== handCountRef.current) {
+        handCountRef.current = count
+        setHandCount(count)
+      }
+
+      let frame: HandFrame | null = null
+      if (count > 0) {
+        let left: HandFrame | null = null
+        let right: HandFrame | null = null
+
+        result.landmarks.forEach((landmarks, i) => {
+          const label = handednessLabel(result.handedness[i])
+          const normalized = normalizeFrame(toLandmarks(landmarks))
+          if (label === 'Left') left = normalized
+          else if (label === 'Right') right = normalized
+          else if (!left) left = normalized
+          else if (!right) right = normalized
+        })
+
+        frame = packDualHand(left, right)
+        drawHands(
+          result.landmarks,
+          result.handedness,
+          video.videoWidth,
+          video.videoHeight,
+        )
+      } else {
+        const canvas = canvasRef.current
+        const ctx = canvas?.getContext('2d')
+        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+
+      onFrameRef.current?.(frame)
+    } catch {
+      // MediaPipe can throw if the video frame is invalid right after audio
+      // session changes on iOS. Swallow and keep the loop alive.
+    } finally {
+      if (runningRef.current) {
+        rafRef.current = requestAnimationFrame(() => loopRef.current())
+      }
     }
-
-    let ts = performance.now()
-    if (ts <= lastTsRef.current) ts = lastTsRef.current + 1
-    lastTsRef.current = ts
-
-    const result = landmarker.detectForVideo(video, ts)
-    const count = result.landmarks.length
-    setHandCount(count)
-
-    let frame: HandFrame | null = null
-    if (count > 0) {
-      let left: HandFrame | null = null
-      let right: HandFrame | null = null
-
-      result.landmarks.forEach((landmarks, i) => {
-        const label = handednessLabel(result.handedness[i])
-        const normalized = normalizeFrame(toLandmarks(landmarks))
-        if (label === 'Left') left = normalized
-        else if (label === 'Right') right = normalized
-        else if (!left) left = normalized
-        else if (!right) right = normalized
-      })
-
-      frame = packDualHand(left, right)
-      drawHands(
-        result.landmarks,
-        result.handedness,
-        video.videoWidth,
-        video.videoHeight,
-      )
-    } else {
-      const canvas = canvasRef.current
-      const ctx = canvas?.getContext('2d')
-      if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
-    }
-
-    setLatestFrame(frame)
-    onFrameRef.current?.(frame)
-
-    rafRef.current = requestAnimationFrame(loop)
   }, [drawHands])
+
+  useEffect(() => {
+    loopRef.current = loop
+  }, [loop])
 
   const startCamera = useCallback(async () => {
     setError(null)
@@ -217,10 +262,14 @@ export function useHandLandmarker(
       streamRef.current = stream
       const video = videoRef.current
       if (!video) return
+      video.setAttribute('playsinline', 'true')
+      video.setAttribute('webkit-playsinline', 'true')
+      video.muted = true
       video.srcObject = stream
       await video.play()
+      runningRef.current = true
       cancelAnimationFrame(rafRef.current)
-      rafRef.current = requestAnimationFrame(loop)
+      rafRef.current = requestAnimationFrame(() => loopRef.current())
     } catch (err) {
       setError(
         err instanceof Error
@@ -228,31 +277,31 @@ export function useHandLandmarker(
           : '無法開啟鏡頭，請允許相機權限',
       )
     }
-  }, [loop])
+  }, [])
 
   const stopCamera = useCallback(() => {
+    runningRef.current = false
     cancelAnimationFrame(rafRef.current)
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
+    handCountRef.current = 0
     setHandCount(0)
-    setLatestFrame(null)
   }, [])
 
-  /** Re-play video + restart detect loop (iOS often pauses after TTS/beep). */
   const resumePreview = useCallback(async () => {
     const video = videoRef.current
     if (!video || !streamRef.current) return
+    video.muted = true
     try {
-      if (video.paused) {
-        await video.play()
-      }
+      await video.play()
     } catch {
       // ignore autoplay race
     }
+    runningRef.current = true
     cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(loop)
-  }, [loop])
+    rafRef.current = requestAnimationFrame(() => loopRef.current())
+  }, [])
 
   return {
     videoRef,
@@ -260,7 +309,6 @@ export function useHandLandmarker(
     ready,
     error,
     handCount,
-    latestFrame,
     startCamera,
     stopCamera,
     resumePreview,

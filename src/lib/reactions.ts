@@ -19,13 +19,9 @@ export function setPreviewResumer(fn: (() => void) | null): void {
 }
 
 function resumePreviewSoon(): void {
-  // Defer so iOS finishes audio-session handoff before video.play()
-  window.setTimeout(() => {
-    previewResumer?.()
-  }, 50)
-  window.setTimeout(() => {
-    previewResumer?.()
-  }, 300)
+  window.setTimeout(() => previewResumer?.(), 0)
+  window.setTimeout(() => previewResumer?.(), 120)
+  window.setTimeout(() => previewResumer?.(), 400)
 }
 
 export function stopReactions(): void {
@@ -62,13 +58,12 @@ function playUnlockBeep(ctx: AudioContext): void {
 
 /**
  * Must be called from a user gesture (tap/click).
- * On iOS we unlock HTMLAudio / AudioContext only — never speechSynthesis —
- * because TTS "叮" pauses the camera preview.
+ * Never use speechSynthesis here while the camera is running — on iOS it
+ * pauses the <video> element and/or breaks MediaPipe's detect loop.
  */
 export async function unlockAudio(): Promise<void> {
   if (typeof window === 'undefined') return
 
-  // 1) Unlock HTMLAudio (needed for /api/tts)
   try {
     const silent = new Audio(SILENT_WAV)
     silent.volume = 0.01
@@ -77,7 +72,6 @@ export async function unlockAudio(): Promise<void> {
     // ignore
   }
 
-  // 2) Unlock AudioContext + short beep (does not freeze camera like speechSynthesis)
   try {
     const AC =
       window.AudioContext ||
@@ -85,28 +79,21 @@ export async function unlockAudio(): Promise<void> {
     if (AC) {
       if (!unlockAudioContext) unlockAudioContext = new AC()
       if (unlockAudioContext.state === 'suspended') {
-        // resume() returns a promise; kick it off but also try beep after
-        void unlockAudioContext.resume()
+        await unlockAudioContext.resume()
       }
       playUnlockBeep(unlockAudioContext)
-      if (unlockAudioContext.state === 'suspended') {
-        await unlockAudioContext.resume()
-        playUnlockBeep(unlockAudioContext)
-      }
     }
   } catch {
     // ignore
   }
 
-  // 3) Desktop only: warm Web Speech without audible "叮"
+  // Warm Web Speech only on desktop; iOS camera + speechSynthesis conflict
   if (!isLikelyIOS() && typeof speechSynthesis !== 'undefined') {
     try {
-      speechSynthesis.cancel()
       const warm = new SpeechSynthesisUtterance(' ')
       warm.volume = 0
       warm.rate = 2
       speechSynthesis.speak(warm)
-      speechSynthesis.resume()
     } catch {
       // ignore
     }
@@ -191,7 +178,6 @@ async function speak(text: string): Promise<void> {
   const trimmed = text.trim()
   if (!trimmed) return
 
-  // Prefer server TTS + HTMLAudio everywhere (avoids freezing camera on iOS)
   try {
     await playTtsAudio(trimmed)
     return
@@ -282,7 +268,15 @@ async function speakViaSynthesis(text: string): Promise<void> {
 function playUrl(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const audio = new Audio(url)
+    // Keep camera session preferred: don't let media take exclusive focus longer than needed
+    audio.setAttribute('playsinline', 'true')
     currentAudio = audio
+
+    // Kick camera resume as soon as playback starts (iOS pauses video here)
+    audio.onplaying = () => {
+      resumePreviewSoon()
+    }
+
     audio.onended = () => {
       currentAudio = null
       resumePreviewSoon()

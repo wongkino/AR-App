@@ -394,7 +394,14 @@ export default function App() {
               </button>
             </div>
           )}
-          <video ref={videoRef} className="cam" playsInline muted autoPlay />
+          <video
+            ref={videoRef}
+            className="cam"
+            playsInline
+            muted
+            autoPlay
+            disablePictureInPicture
+          />
           <canvas ref={canvasRef} className="overlay" />
           {mode === 'recording' && <div className="rec-badge">REC</div>}
           {mode === 'listening' && <div className="listen-badge">LISTEN</div>}
