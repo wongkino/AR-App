@@ -197,6 +197,8 @@ export function ControlPanel({
         </p>
         <p className="hint">
           <a href="/fight">進入手勢格鬥（多人對戰）→</a>
+          {' · '}
+          <a href="/rps">包剪揼（多人對戰）→</a>
         </p>
       </header>
 
