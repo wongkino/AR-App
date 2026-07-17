@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.4] - 2026-07-17
+
+- fix: unstick gesture re-triggers blocked by hung iOS audio (acb9703)
+
 ## [v0.5.3] - 2026-07-17
 
 - fix: allow gesture re-trigger after cooldown on iOS (42796fa)
