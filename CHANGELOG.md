@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.6.6] - 2026-07-17
+
+- Merge pull request #3 from wongkino/cursor/rps-game-c018 (8c95ccb)
+- Move admin login to home settings button and simplify settings (d86c261)
+- Restructure home as game hub and move gestures to /settings (0d585f2)
+- Fix false "not connected" error on game page load (dd5ab4a)
+- Add best-of-3 match format setting for RPS game (a5d987b)
+
 ## [v0.6.5] - 2026-07-17
 
 - Merge pull request #2 from wongkino/cursor/rps-game-c018 (43a1b65)
