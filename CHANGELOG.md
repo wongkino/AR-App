@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.3] - 2026-07-17
+
+- fix: allow gesture re-trigger after cooldown on iOS (42796fa)
+
 ## [v0.5.2] - 2026-07-17
 
 - fix: keep camera RAF alive when audio pauses iOS video (900d360)
