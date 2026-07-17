@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.4] - 2026-07-17
+
+- fix: unlock Web Speech on iOS/iPad with explicit user tap (460a0ab)
+
 ## [v0.4.3] - 2026-07-17
 
 - style: apply square aspect-ratio to viewport on all breakpoints (ee522e0)
