@@ -217,18 +217,34 @@ export default function App() {
     flash('開始錄製，請對鏡頭做完一整段手勢')
   }, [ensureCamera, flash])
 
+  const onStartListen = useCallback(async () => {
+    stopReactions()
+    matcherRef.current.clear()
+    setLastTriggered(null)
+    setMode('listening')
+    await ensureCamera()
+  }, [ensureCamera, flash])
+
+  const onStopListen = useCallback(() => {
+    setMode('idle')
+    matcherRef.current.clear()
+    stopReactions()
+    flash('已停止監聽')
+  }, [flash])
+
   const onStopRecord = useCallback(() => {
     const frames = [...recordBuf.current]
     recordBuf.current = []
-    setMode('idle')
     if (frames.length < 10) {
       setPendingFrames(null)
       flash('錄得太短，請至少做約半秒以上的手勢')
+      void onStartListen()
       return
     }
     setPendingFrames(frames)
     flash(`已擷取 ${frames.length} 幀，可按「儲存手勢」`)
-  }, [flash])
+    void onStartListen()
+  }, [flash, onStartListen])
 
   const onSave = useCallback(() => {
     if (!canEditRef.current) {
@@ -267,21 +283,17 @@ export default function App() {
     flash(`已儲存「${name}」到資料庫`)
   }, [pendingFrames, draftName, draftReaction, gestures.length, flash])
 
-  const onStartListen = useCallback(async () => {
-    stopReactions()
-    matcherRef.current.clear()
-    setLastTriggered(null)
-    setMode('listening')
-    await ensureCamera()
-    flash('監聽中，重複已儲存的手勢即可觸發')
-  }, [ensureCamera, flash])
-
-  const onStopListen = useCallback(() => {
-    setMode('idle')
-    matcherRef.current.clear()
-    stopReactions()
-    flash('已停止監聽')
-  }, [flash])
+  // 開頁後模型就緒即自動開始監聽
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (!ready || autoStarted.current) return
+    if (modeRef.current === 'recording') return
+    autoStarted.current = true
+    void onStartListen().catch(() => {
+      autoStarted.current = false
+      flash('請允許相機權限以開始監聽')
+    })
+  }, [ready, onStartListen, flash])
 
   const onDelete = useCallback((id: string) => {
     if (!canEditRef.current) return
@@ -323,15 +335,15 @@ export default function App() {
         <div className="viewport">
           {!cameraOn && (
             <div className="camera-gate">
-              <h2>開啟鏡頭開始</h2>
-              <p>手勢直接存於資料庫。一般可監聽；錄製需管理密碼。</p>
+              <h2>{ready ? '正在開啟相機…' : '載入模型中…'}</h2>
+              <p>開頁後會自動開始監聽。若瀏覽器擋下權限，請手動允許相機。</p>
               <button
                 type="button"
                 className="primary"
                 disabled={!ready}
-                onClick={() => void ensureCamera()}
+                onClick={() => void onStartListen()}
               >
-                {ready ? '開啟相機' : '載入模型中…'}
+                {ready ? '允許相機並監聽' : '請稍候…'}
               </button>
             </div>
           )}

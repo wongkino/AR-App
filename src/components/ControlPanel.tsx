@@ -266,7 +266,7 @@ export function ControlPanel({
 
       <section className="block">
         <h2>監聽</h2>
-        <p className="hint">對準鏡頭重複已儲存的手勢，系統會自動觸發反應。</p>
+        <p className="hint">開頁後會自動監聽。也可手動停止或重新開始。</p>
         <div className="actions">
           {mode !== 'listening' ? (
             <button
