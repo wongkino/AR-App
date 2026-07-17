@@ -59,7 +59,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           VERSION=$(tr -d '[:space:]' < VERSION)
           TAG="v${VERSION}"
-          git add VERSION package.json server/package.json CHANGELOG.md
+          git add VERSION package.json package-lock.json server/package.json server/package-lock.json CHANGELOG.md
           if git diff --cached --quiet; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"

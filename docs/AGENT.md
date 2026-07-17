@@ -53,6 +53,11 @@ node scripts/bump-version.mjs --set 0.0.1
 
 - **真實版本來源**：根目錄 `VERSION`（目前語意化 `MAJOR.MINOR.PATCH`）。
 - 推送到 `main` 會觸發 `release.yml` **自動升版**並打 `vX.Y.Z` tag。
+- 每次升版會同步更新：
+  - `VERSION`
+  - `package.json` / `package-lock.json`
+  - `server/package.json` / `server/package-lock.json`
+  - `CHANGELOG.md`
 - Commit 訊息含 **`[skip version]`** → 不升版（僅限文件 typo、workflow 熱修等）。
 - 升版 commit 格式：`chore(release): vX.Y.Z [skip version]`（由 bot 產生）。
 - Conventional Commits 影響自動 bump 種類：

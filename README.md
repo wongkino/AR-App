@@ -60,7 +60,7 @@ npm install && npm run dev
 
 1. 開發者推送到 `main`
 2. `release.yml` 依 Conventional Commits 自動 bump（預設 patch）
-3. 更新 `VERSION`、`package.json`、`server/package.json`、`CHANGELOG.md`
+3. 更新 `VERSION`、`package.json`、`package-lock.json`、`server/package.json`、`server/package-lock.json`、`CHANGELOG.md`
 4. 打上 `vX.Y.Z` tag 並推送
 5. `docker.yml` 建置並推送對應版本映像
 

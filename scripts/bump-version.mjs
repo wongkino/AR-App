@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bump project version across VERSION, package.json files, and CHANGELOG.md
+ * Bump project version across VERSION, package.json, package-lock.json, and CHANGELOG.md
  * Usage:
  *   node scripts/bump-version.mjs              # auto (conventional commits → patch/minor/major)
  *   node scripts/bump-version.mjs patch|minor|major
@@ -80,6 +80,20 @@ function setPackageVersion(filePath, version) {
   writeFileSync(filePath, `${JSON.stringify(pkg, null, 2)}\n`)
 }
 
+/** Keep package-lock.json root / packages[""] version in sync with package.json */
+function setLockfileVersion(lockPath, version) {
+  try {
+    const lock = JSON.parse(readFileSync(lockPath, 'utf8'))
+    lock.version = version
+    if (lock.packages && lock.packages['']) {
+      lock.packages[''].version = version
+    }
+    writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`)
+  } catch {
+    // lockfile may not exist yet
+  }
+}
+
 function updateChangelog(version, notes) {
   const path = resolve(root, 'CHANGELOG.md')
   let existing = ''
@@ -115,7 +129,10 @@ if (args[0] === '--set' && args[1]) {
 writeFileSync(resolve(root, 'VERSION'), `${next}\n`)
 setPackageVersion(resolve(root, 'package.json'), next)
 setPackageVersion(resolve(root, 'server/package.json'), next)
+setLockfileVersion(resolve(root, 'package-lock.json'), next)
+setLockfileVersion(resolve(root, 'server/package-lock.json'), next)
 updateChangelog(next, collectChangelogNotes())
 
 console.log(`version ${current} → ${next}`)
 console.log(`tag=v${next}`)
+console.log('updated: VERSION, package.json, package-lock.json, server/package.json, server/package-lock.json, CHANGELOG.md')
