@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.5] - 2026-07-17
+
+- Merge pull request #2 from wongkino/cursor/rps-game-c018 (43a1b65)
+- Add multiplayer rock-paper-scissors game at /rps (92e732c)
+
 ## [v0.6.4] - 2026-07-17
 
 - Merge pull request #1 from wongkino/cursor/multiplayer-fight-game-c018 (67251bd)
