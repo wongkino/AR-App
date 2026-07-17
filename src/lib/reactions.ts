@@ -1,7 +1,10 @@
 import type { Reaction } from '../types'
 
 let currentAudio: HTMLAudioElement | null = null
+/** Single player primed inside a user gesture — required for iOS programmatic play. */
+let unlockedPlayer: HTMLAudioElement | null = null
 let settleCurrentPlay: (() => void) | null = null
+let activeSource: AudioBufferSourceNode | null = null
 let voicesReady: Promise<void> | null = null
 let audioUnlocked = false
 let unlockAudioContext: AudioContext | null = null
@@ -9,6 +12,8 @@ let previewResumer: (() => void) | null = null
 
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
+const ttsBlobCache = new Map<string, Blob>()
 
 export function isAudioUnlocked(): boolean {
   return audioUnlocked
@@ -28,6 +33,17 @@ function resumePreviewSoon(): void {
 function finishCurrentPlay(): void {
   const settle = settleCurrentPlay
   settleCurrentPlay = null
+
+  if (activeSource) {
+    try {
+      activeSource.stop()
+    } catch {
+      // ignore
+    }
+    activeSource.disconnect()
+    activeSource = null
+  }
+
   if (currentAudio) {
     currentAudio.onended = null
     currentAudio.onerror = null
@@ -39,8 +55,12 @@ function finishCurrentPlay(): void {
     } catch {
       // ignore
     }
-    currentAudio = null
+    // Keep unlockedPlayer alive — never dispose the gesture-primed element
+    if (currentAudio !== unlockedPlayer) {
+      currentAudio = null
+    }
   }
+
   settle?.()
 }
 
@@ -56,6 +76,16 @@ function isLikelyIOS(): boolean {
   const ua = navigator.userAgent
   if (/iPhone|iPad|iPod/i.test(ua)) return true
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+function ensureAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  const AC =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AC) return null
+  if (!unlockAudioContext) unlockAudioContext = new AC()
+  return unlockAudioContext
 }
 
 function playUnlockBeep(ctx: AudioContext): void {
@@ -78,39 +108,45 @@ export type UnlockAudioOptions = {
 }
 
 /**
- * Unlock HTMLAudio / AudioContext for later gesture TTS.
- * Best called from a user gesture on iOS; desktop often works without one.
- * Never use audible speechSynthesis here while the camera is running.
+ * Must run from a user gesture on iOS.
+ * Primes a persistent HTMLAudioElement + AudioContext so later gesture-match
+ * playback (no user gesture) is still allowed.
  */
 export async function unlockAudio(options?: UnlockAudioOptions): Promise<void> {
   if (typeof window === 'undefined') return
   const beep = options?.beep === true
 
+  // 1) Persistent <audio> unlocked by this gesture (關鍵：之後不能 new Audio)
+  if (!unlockedPlayer) {
+    unlockedPlayer = new Audio()
+    unlockedPlayer.setAttribute('playsinline', 'true')
+    unlockedPlayer.preload = 'auto'
+  }
   try {
-    const silent = new Audio(SILENT_WAV)
-    silent.volume = 0.01
-    void silent.play().catch(() => undefined)
+    unlockedPlayer.src = SILENT_WAV
+    unlockedPlayer.volume = 0.01
+    await unlockedPlayer.play()
+    unlockedPlayer.pause()
+    unlockedPlayer.currentTime = 0
+    unlockedPlayer.volume = 1
   } catch {
-    // ignore
+    // may still succeed later after a real tap
   }
 
+  // 2) AudioContext (best path for programmatic TTS after unlock)
   try {
-    const AC =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    if (AC) {
-      if (!unlockAudioContext) unlockAudioContext = new AC()
-      if (unlockAudioContext.state === 'suspended') {
-        await unlockAudioContext.resume()
+    const ctx = ensureAudioContext()
+    if (ctx) {
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
       }
       if (beep) {
-        playUnlockBeep(unlockAudioContext)
+        playUnlockBeep(ctx)
       } else {
-        // Silent buffer still marks the context as running / unlocked
-        const buffer = unlockAudioContext.createBuffer(1, 1, 22050)
-        const source = unlockAudioContext.createBufferSource()
+        const buffer = ctx.createBuffer(1, 1, 22050)
+        const source = ctx.createBufferSource()
         source.buffer = buffer
-        source.connect(unlockAudioContext.destination)
+        source.connect(ctx.destination)
         source.start(0)
       }
     }
@@ -216,7 +252,6 @@ async function speak(text: string): Promise<void> {
     ttsError = err instanceof Error ? err.message : 'TTS 失敗'
   }
 
-  // Always fall back to Web Speech (including iOS) instead of a dead-end error
   try {
     await speakViaSynthesis(trimmed)
     return
@@ -230,66 +265,114 @@ async function speak(text: string): Promise<void> {
   }
 }
 
-const ttsBlobCache = new Map<string, string>()
+async function fetchTtsBlob(text: string): Promise<Blob> {
+  const cached = ttsBlobCache.get(text)
+  if (cached) return cached
 
-async function playTtsAudio(text: string): Promise<void> {
-  const key = text
-  let objectUrl = ttsBlobCache.get(key)
+  const langs = ['yue', 'zh-TW', 'zh-CN']
+  let lastErr = 'TTS 服務無回應'
 
-  if (!objectUrl) {
-    const langs = ['yue', 'zh-TW', 'zh-CN']
-    let lastErr = 'TTS 服務無回應'
-    let blob: Blob | null = null
-
-    for (const lang of langs) {
-      try {
-        const res = await fetch(
-          `/api/tts?text=${encodeURIComponent(text.slice(0, 180))}&lang=${encodeURIComponent(lang)}`,
-        )
-        if (!res.ok) {
-          let detail = `HTTP ${res.status}`
-          try {
-            const body = (await res.json()) as { error?: string }
-            if (body.error) detail = body.error
-          } catch {
-            // ignore
-          }
-          lastErr = detail
-          continue
+  for (const lang of langs) {
+    try {
+      const res = await fetch(
+        `/api/tts?text=${encodeURIComponent(text.slice(0, 180))}&lang=${encodeURIComponent(lang)}`,
+      )
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`
+        try {
+          const body = (await res.json()) as { error?: string }
+          if (body.error) detail = body.error
+        } catch {
+          // ignore
         }
-        const type = res.headers.get('content-type') ?? ''
-        const next = await res.blob()
-        if (next.size < 64) {
-          lastErr = 'TTS 音訊為空'
-          continue
-        }
-        if (type.includes('json') || type.includes('text/html')) {
-          lastErr = 'TTS 回應格式錯誤'
-          continue
-        }
-        blob = next
-        break
-      } catch (err) {
-        lastErr = err instanceof Error ? err.message : '網路錯誤'
+        lastErr = detail
+        continue
       }
-    }
-
-    if (!blob) {
-      throw new Error(lastErr)
-    }
-
-    objectUrl = URL.createObjectURL(blob)
-    if (ttsBlobCache.size >= 40) {
-      const oldest = ttsBlobCache.keys().next().value
-      if (oldest) {
-        URL.revokeObjectURL(ttsBlobCache.get(oldest)!)
-        ttsBlobCache.delete(oldest)
+      const type = res.headers.get('content-type') ?? ''
+      const next = await res.blob()
+      if (next.size < 64) {
+        lastErr = 'TTS 音訊為空'
+        continue
       }
+      if (type.includes('json') || type.includes('text/html')) {
+        lastErr = 'TTS 回應格式錯誤'
+        continue
+      }
+      if (ttsBlobCache.size >= 40) {
+        const oldest = ttsBlobCache.keys().next().value
+        if (oldest) ttsBlobCache.delete(oldest)
+      }
+      ttsBlobCache.set(text, next)
+      return next
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : '網路錯誤'
     }
-    ttsBlobCache.set(key, objectUrl)
   }
 
-  await playUrl(objectUrl)
+  throw new Error(lastErr)
+}
+
+async function playTtsAudio(text: string): Promise<void> {
+  const blob = await fetchTtsBlob(text)
+
+  // Prefer AudioContext: stays unlocked after gesture; works from camera callbacks
+  try {
+    await playBlobViaAudioContext(blob)
+    return
+  } catch {
+    // fall through to primed HTMLAudioElement
+  }
+
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    await playUrl(objectUrl)
+  } finally {
+    // Delay revoke so playback can start
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000)
+  }
+}
+
+async function playBlobViaAudioContext(blob: Blob): Promise<void> {
+  const ctx = ensureAudioContext()
+  if (!ctx) throw new Error('無 AudioContext')
+  if (ctx.state === 'suspended') {
+    await ctx.resume()
+  }
+  if (ctx.state !== 'running') {
+    throw new Error('AudioContext 未解鎖')
+  }
+
+  finishCurrentPlay()
+
+  const raw = await blob.arrayBuffer()
+  // decodeAudioData may detach the buffer; copy first
+  const copy = raw.slice(0)
+  const audioBuf = await ctx.decodeAudioData(copy)
+  const source = ctx.createBufferSource()
+  source.buffer = audioBuf
+  source.connect(ctx.destination)
+  activeSource = source
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false
+    const done = () => {
+      if (settled) return
+      settled = true
+      if (activeSource === source) activeSource = null
+      resumePreviewSoon()
+      resolve()
+    }
+    source.onended = done
+    try {
+      source.start(0)
+    } catch (err) {
+      if (activeSource === source) activeSource = null
+      reject(err instanceof Error ? err : new Error('AudioContext 播放失敗'))
+      return
+    }
+    // Safety
+    window.setTimeout(done, Math.ceil(audioBuf.duration * 1000) + 500)
+  })
 }
 
 async function speakViaSynthesis(text: string): Promise<void> {
@@ -375,9 +458,13 @@ function playUrl(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     finishCurrentPlay()
 
-    const audio = new Audio(url)
-    audio.setAttribute('playsinline', 'true')
-    audio.preload = 'auto'
+    // Reuse the gesture-primed element — new Audio() is blocked on iOS after unlock
+    const audio = unlockedPlayer ?? new Audio()
+    if (!unlockedPlayer) {
+      unlockedPlayer = audio
+      audio.setAttribute('playsinline', 'true')
+      audio.preload = 'auto'
+    }
     currentAudio = audio
 
     let settled = false
@@ -390,9 +477,6 @@ function playUrl(url: string): Promise<void> {
       settleCurrentPlay = null
       window.clearTimeout(safetyTimer)
       window.clearTimeout(durationTimer)
-      if (currentAudio === audio) {
-        currentAudio = null
-      }
       resumePreviewSoon()
       if (err) reject(err)
       else resolve()
@@ -416,13 +500,29 @@ function playUrl(url: string): Promise<void> {
 
     safetyTimer = window.setTimeout(() => settle(), 12_000)
 
-    void audio.play().catch((err: unknown) => {
-      const name = err instanceof DOMException ? err.name : ''
-      if (name === 'NotAllowedError') {
-        settle(new Error('播放被瀏覽器阻擋，請點一下畫面'))
-        return
+    const start = () => {
+      void audio.play().catch((err: unknown) => {
+        const name = err instanceof DOMException ? err.name : ''
+        if (name === 'NotAllowedError') {
+          settle(new Error('播放被瀏覽器阻擋，請點一下畫面'))
+          return
+        }
+        settle(err instanceof Error ? err : new Error('播放失敗'))
+      })
+    }
+
+    if (audio.src === url) {
+      try {
+        audio.currentTime = 0
+      } catch {
+        // ignore
       }
-      settle(err instanceof Error ? err : new Error('播放失敗'))
-    })
+      start()
+      return
+    }
+
+    audio.src = url
+    audio.load()
+    start()
   })
 }
