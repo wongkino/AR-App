@@ -8,6 +8,7 @@ import { cors } from 'hono/cors'
 import type { Context, Next } from 'hono'
 import { initDb, pool } from './db.js'
 import { gameHub } from './game.js'
+import { rpsHub } from './rps.js'
 
 type GestureBody = {
   id: string
@@ -52,6 +53,21 @@ app.get(
     },
     onClose(_event, ws) {
       gameHub.handleClose(ws)
+    },
+  })),
+)
+
+app.get(
+  '/ws/rps',
+  upgradeWebSocket(() => ({
+    onOpen(_event, ws) {
+      rpsHub.handleOpen(ws)
+    },
+    onMessage(event, ws) {
+      rpsHub.handleMessage(ws, String(event.data))
+    },
+    onClose(_event, ws) {
+      rpsHub.handleClose(ws)
     },
   })),
 )

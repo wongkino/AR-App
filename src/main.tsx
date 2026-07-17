@@ -3,10 +3,18 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import FightApp from './FightApp.tsx'
+import RpsApp from './RpsApp.tsx'
 
-const isFightRoute =
-  window.location.pathname === '/fight' || window.location.pathname.startsWith('/fight/')
+const path = window.location.pathname
+
+function RootApp() {
+  if (path === '/fight' || path.startsWith('/fight/')) return <FightApp />
+  if (path === '/rps' || path.startsWith('/rps/')) return <RpsApp />
+  return <App />
+}
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{isFightRoute ? <FightApp /> : <App />}</StrictMode>,
+  <StrictMode>
+    <RootApp />
+  </StrictMode>,
 )
