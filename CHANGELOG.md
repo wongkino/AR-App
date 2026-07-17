@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.9] - 2026-07-17
+
+- Move gesture-to-move loadouts into settings and hide them in game lobbies. (b05a16b)
+
 ## [v0.6.8] - 2026-07-17
 
 - Add gesture retraining samples and live test mode in settings. (145950b)
