@@ -308,7 +308,7 @@ textarea {
   border-color: transparent;
 }
 
-.reaction-fieldset {
+.reaction-editor {
   margin: 0;
   padding: 0;
   border: 0;
@@ -316,33 +316,49 @@ textarea {
   gap: 0.65rem;
 }
 
-.reaction-fieldset legend {
-  padding: 0;
+.reaction-editor.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.reaction-label {
+  margin: 0;
   font-size: 0.8rem;
   color: var(--muted);
-  margin-bottom: 0.25rem;
 }
 
 .seg {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .seg button {
+  appearance: none;
+  -webkit-appearance: none;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 999px;
-  padding: 0.55rem 0.75rem;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0.75rem 0.85rem;
   cursor: pointer;
   color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .seg button.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
-  font-weight: 600;
+  color: #fff;
+}
+
+.seg button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .actions {
@@ -357,10 +373,13 @@ button.danger,
 .camera-gate .primary {
   border: 0;
   border-radius: 999px;
+  min-height: 44px;
   padding: 0.7rem 1.1rem;
   cursor: pointer;
   font-weight: 600;
   transition: transform 0.15s ease, opacity 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button.primary,
@@ -379,11 +398,13 @@ button.danger {
   color: white;
 }
 
-button.primary:hover,
-button.secondary:hover,
-button.danger:hover,
-.camera-gate .primary:hover {
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  button.primary:hover,
+  button.secondary:hover,
+  button.danger:hover,
+  .camera-gate .primary:hover {
+    transform: translateY(-1px);
+  }
 }
 
 button:disabled {
@@ -436,22 +457,28 @@ button:disabled {
 
 .row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   flex-shrink: 0;
 }
 
 .row-actions button {
-  border: 0;
-  background: transparent;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.85);
   color: var(--accent);
   font-weight: 600;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  padding: 0.25rem 0.35rem;
+  min-height: 40px;
+  padding: 0.45rem 0.7rem;
+  border-radius: 10px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .row-actions .danger-text {
   color: var(--warn);
+  border-color: rgba(196, 92, 38, 0.35);
 }
 
 .sync-code {
@@ -460,7 +487,7 @@ button:disabled {
   color: var(--accent);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .app {
     grid-template-columns: 1fr;
     padding: 0.85rem;
@@ -468,7 +495,7 @@ button:disabled {
   }
 
   .viewport {
-    min-height: min(58dvh, 480px);
+    min-height: min(48dvh, 420px);
     border-radius: var(--radius);
   }
 
@@ -479,5 +506,15 @@ button:disabled {
 
   .stage-bg {
     display: none;
+  }
+
+  .seg {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .viewport {
+    min-height: min(58dvh, 480px);
   }
 }

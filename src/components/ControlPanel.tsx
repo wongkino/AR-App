@@ -48,12 +48,15 @@ function ReactionEditor({
   disabled?: boolean
 }) {
   return (
-    <fieldset className="reaction-fieldset" disabled={disabled}>
-      <legend>反應</legend>
-      <div className="seg">
+    <div className={`reaction-editor${disabled ? ' is-disabled' : ''}`} role="group" aria-label="反應">
+      <p className="reaction-label">反應</p>
+      <div className="seg" role="tablist" aria-label="反應類型">
         <button
           type="button"
+          role="tab"
+          aria-selected={value.kind === 'speak'}
           className={value.kind === 'speak' ? 'active' : ''}
+          disabled={disabled}
           onClick={() =>
             onChange({
               kind: 'speak',
@@ -65,7 +68,10 @@ function ReactionEditor({
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={value.kind === 'play'}
           className={value.kind === 'play' ? 'active' : ''}
+          disabled={disabled}
           onClick={() =>
             onChange({
               kind: 'play',
@@ -84,6 +90,7 @@ function ReactionEditor({
           <textarea
             rows={3}
             value={value.text}
+            disabled={disabled}
             onChange={(e) => onChange({ kind: 'speak', text: e.target.value })}
             placeholder="觸發時會用粵語讀出嚟"
           />
@@ -93,6 +100,7 @@ function ReactionEditor({
           <span>音訊網址（mp3 / wav）</span>
           <input
             value={value.url}
+            disabled={disabled}
             onChange={(e) =>
               onChange({
                 kind: 'play',
@@ -104,7 +112,7 @@ function ReactionEditor({
           />
         </label>
       )}
-    </fieldset>
+    </div>
   )
 }
 
