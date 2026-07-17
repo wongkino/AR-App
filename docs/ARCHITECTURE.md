@@ -8,16 +8,11 @@
 Gesture Lab 是一個瀏覽器端手勢互動應用：以相機擷取手部關鍵點，錄製成可重播比對的時間序列，匹配成功後觸發朗讀或播放音訊。可選透過同步碼將手勢持久化到 PostgreSQL，跨裝置共用。
 
 ```text
-┌─────────────┐     HTTPS/HTTP      ┌─────────────┐     SQL      ┌────────────┐
-│  Browser    │ ◄─────────────────► │  nginx/web  │              │            │
-│  React SPA  │                     │  (static)   │              │ PostgreSQL │
-│  MediaPipe  │                     └──────┬──────┘              │            │
-└─────────────┘                            │ /api/*              └─────▲──────┘
-                                           ▼                             │
-                                    ┌─────────────┐                      │
-                                    │  Hono API   │ ─────────────────────┘
-                                    │  Node.js    │
-                                    └─────────────┘
+┌─────────────┐     HTTP :8080      ┌──────────────────┐     SQL      ┌────────────┐
+│  Browser    │ ◄─────────────────► │  app (單一服務)   │ ───────────► │ PostgreSQL │
+│  React SPA  │   /  +  /api/*      │  Hono + static   │              │            │
+│  MediaPipe  │                     └──────────────────┘              └────────────┘
+└─────────────┘
 ```
 
 ## 2. 儲存庫結構
@@ -123,20 +118,18 @@ Schema 於 API 啟動時 `CREATE TABLE IF NOT EXISTS`。
 
 | Service | Image / Build | Port |
 |---------|---------------|------|
-| `web` | `ghcr.io/wongkino/ar-app-web` 或本機 build | 8080→80 |
-| `api` | `ghcr.io/wongkino/ar-app-api` 或本機 build | 內部 3001 |
+| `app` | `ghcr.io/wongkino/ar-app`（web + api 合併） | 8080→8080 |
 | `db` | `postgres:16-alpine` | 內部 5432 |
 
-nginx 將 `/api/` reverse proxy 到 `api:3001`。
+單一 Node 行程同時提供靜態前端與 `/api/*`。
 
 ### 5.2 CI/CD
 
 ```text
 push main
-  → release.yml：升版（patch/minor/major）→ commit + tag vX.Y.Z
-  → docker.yml（on tag）：build/push
-       ghcr.io/wongkino/ar-app-web:X.Y.Z / :latest
-       ghcr.io/wongkino/ar-app-api:X.Y.Z / :latest
+  → release.yml：升版 → tag vX.Y.Z
+  → 建置並推送單一映像
+       ghcr.io/wongkino/ar-app:X.Y.Z / :latest
 ```
 
 版本來源：`VERSION` 檔（並同步 `package.json`、`server/package.json`、`CHANGELOG.md`）。

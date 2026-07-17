@@ -27,7 +27,8 @@
 | REST 客戶端 | `src/lib/api.ts` |
 | API／Schema | `server/src/index.ts`、`server/src/db.ts` |
 | 升版邏輯 | `scripts/bump-version.mjs`、`.github/workflows/release.yml` |
-| 映像建置 | `.github/workflows/docker.yml`、兩個 `Dockerfile` |
+| 映像建置 | `.github/workflows/docker.yml`、根目錄 `Dockerfile`（web+api） |
+| API-only 映像 | `server/Dockerfile`（本機除錯用） |
 
 ## 4. 開發指令
 
@@ -117,8 +118,8 @@ curl -s http://localhost:8080/api/health   # {"ok":true}
 
 ## 10. 常見陷阱
 
-1. **僅改前端、忘記 API 在 Docker 網路名是 `api`**：nginx `proxy_pass http://api:3001`。
-2. **本機 Vite 未開 API**：`/api` 會 502；先起 `server` 或 compose。
+1. **本機 Vite 未開 API**：`/api` 會 502；先起 `server` 或用 `docker compose up`（單一 `app` 服務）。
+2. **生產只有一個 app 容器**：不要再找 nginx／獨立 api service。
 3. **升版迴圈**：release commit 必須含 `[skip version]`。
 4. **雙手 frame 長度 42**：舊資料可能 21；`frameDistance` 已相容，勿隨意改壞。
 5. **GHCR private**：使用者 pull 前需 login 或把 package 設 public。

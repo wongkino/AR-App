@@ -14,24 +14,18 @@ services:
       retries: 10
     restart: unless-stopped
 
-  api:
-    image: ${API_IMAGE:-ghcr.io/wongkino/ar-app-api:latest}
-    build: ./server
+  app:
+    image: ${APP_IMAGE:-ghcr.io/wongkino/ar-app:latest}
+    build: .
+    ports:
+      - "8080:8080"
     environment:
       DATABASE_URL: postgres://gesture:gesture@db:5432/gesturelab
-      PORT: "3001"
+      PORT: "8080"
+      STATIC_DIR: /app/public
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
-
-  web:
-    image: ${WEB_IMAGE:-ghcr.io/wongkino/ar-app-web:latest}
-    build: .
-    ports:
-      - "8080:80"
-    depends_on:
-      - api
     restart: unless-stopped
 
 volumes:

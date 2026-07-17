@@ -48,8 +48,7 @@ docker compose up -d
 
 映像：
 
-- `ghcr.io/wongkino/ar-app-web:0.0.1`（或 `:latest`）
-- `ghcr.io/wongkino/ar-app-api:0.0.1`（或 `:latest`）
+- `ghcr.io/wongkino/ar-app:0.0.1`（或 `:latest`）— 前端與 API 同一服務
 
 若無法拉取，請先登入 GHCR，或到 GitHub Packages 將套件設為 Public。
 

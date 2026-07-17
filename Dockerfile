@@ -1,20 +1,31 @@
-# Build stage
-FROM node:22-alpine AS build
-WORKDIR /app
-
+# Unified image: frontend (Vite) + API (Hono) in one service
+FROM node:22-alpine AS web-build
+WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci
-
-COPY . .
+COPY index.html vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY public ./public
+COPY src ./src
 RUN npm run build
 
-# Serve stage
-FROM nginx:1.27-alpine AS runtime
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+FROM node:22-alpine AS api-build
+WORKDIR /api
+COPY server/package.json server/package-lock.json ./
+RUN npm ci
+COPY server/tsconfig.json ./
+COPY server/src ./src
+RUN npm run build && npm prune --omit=dev
 
-EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
-
-CMD ["nginx", "-g", "daemon off;"]
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV STATIC_DIR=/app/public
+COPY --from=api-build /api/package.json ./
+COPY --from=api-build /api/node_modules ./node_modules
+COPY --from=api-build /api/dist ./dist
+COPY --from=web-build /web/dist ./public
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/api/health >/dev/null || exit 1
+CMD ["node", "dist/index.js"]

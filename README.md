@@ -18,7 +18,7 @@
 - 廣東話朗讀、遠端音訊播放
 - 已儲存手勢可改反應
 - 同步碼 → PostgreSQL 雲端保存
-- Docker 一鍵部署；GitHub Actions 自動升版並推 GHCR 映像
+- Docker 一鍵部署（`app` + `db`；web／API 合併）；GitHub Actions 推送 `ghcr.io/wongkino/ar-app`
 
 ## 快速開始（Docker）
 
@@ -40,8 +40,7 @@ docker compose pull
 docker compose up -d
 ```
 
-- `ghcr.io/wongkino/ar-app-web:<version>`
-- `ghcr.io/wongkino/ar-app-api:<version>`
+- `ghcr.io/wongkino/ar-app:<version>`（前端 + API 同一映像）
 
 ## 本機開發
 
@@ -62,7 +61,7 @@ npm install && npm run dev
 2. `release.yml` 依 Conventional Commits 自動 bump（預設 patch）
 3. 更新 `VERSION`、`package.json`、`package-lock.json`、`server/package.json`、`server/package-lock.json`、`CHANGELOG.md`
 4. 打上 `vX.Y.Z` tag 並推送
-5. `docker.yml` 建置並推送對應版本映像
+5. `docker.yml`／release 建置並推送單一映像 `ghcr.io/wongkino/ar-app`
 
 手動指定升版種類：GitHub → Actions → Release → Run workflow → 選 patch／minor／major。
 

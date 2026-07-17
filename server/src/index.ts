@@ -1,4 +1,7 @@
 import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { initDb, pool, randomUUID } from './db.js'
@@ -147,8 +150,19 @@ app.delete('/api/workspaces/:syncKey/gestures/:gestureId', async (c) => {
   return c.json({ ok: true })
 })
 
+/** Serve Vite build (web + api in one process) when public/ exists. */
+const staticRoot = process.env.STATIC_DIR ?? join(process.cwd(), 'public')
+if (existsSync(staticRoot)) {
+  app.use('/*', serveStatic({ root: staticRoot }))
+  app.get('*', serveStatic({ root: staticRoot, path: './index.html' }))
+}
+
 const port = Number(process.env.PORT ?? 3001)
 
 await initDb()
-console.log(`Gesture Lab API listening on :${port}`)
+console.log(
+  existsSync(staticRoot)
+    ? `Gesture Lab (web+api) listening on :${port}`
+    : `Gesture Lab API listening on :${port}`,
+)
 serve({ fetch: app.fetch, port })
