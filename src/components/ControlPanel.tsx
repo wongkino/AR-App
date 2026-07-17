@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { setAdminPassword } from '../lib/api'
+import { MAX_SAMPLES, sampleCount } from '../lib/gestureSamples'
 import { saveAdminPassword } from '../lib/storage'
-import type { AppMode, SavedGesture } from '../types'
+import type { AppMode, MatchResult, SavedGesture } from '../types'
 
 type Props = {
   mode: AppMode
@@ -15,6 +16,14 @@ type Props = {
   onStopRecord: () => void
   canSave: boolean
   onSave: () => void
+  trainTargetId: string | null
+  trainTargetName: string | null
+  onAddSample: () => void
+  onStartTrain: (id: string) => void
+  onCancelTrain: () => void
+  onStartListen: () => void
+  onStopListen: () => void
+  lastMatch: MatchResult | null
   gestures: SavedGesture[]
   onDelete: (id: string) => void
   onUpdate: (id: string, name: string) => void
@@ -32,6 +41,14 @@ export function ControlPanel({
   onStopRecord,
   canSave,
   onSave,
+  trainTargetId,
+  trainTargetName,
+  onAddSample,
+  onStartTrain,
+  onCancelTrain,
+  onStartListen,
+  onStopListen,
+  lastMatch,
   gestures,
   onDelete,
   onUpdate,
@@ -61,6 +78,18 @@ export function ControlPanel({
           ? '已連線'
           : '連線失敗'
 
+  const isTraining = Boolean(trainTargetId)
+  const isListening = mode === 'listening'
+  const isRecording = mode === 'recording'
+  const busy = isListening || isRecording
+
+  const modeLabel =
+    mode === 'recording'
+      ? `錄製中 · ${recordingCount} 幀`
+      : mode === 'listening'
+        ? '測試中'
+        : '待命'
+
   return (
     <aside className="panel">
       <header className="panel-brand">
@@ -85,9 +114,7 @@ export function ControlPanel({
       </header>
 
       <div className="status-row" aria-live="polite">
-        <span className={`pill mode-${mode}`}>
-          {mode === 'recording' ? `錄製中 · ${recordingCount} 幀` : '待命'}
-        </span>
+        <span className={`pill mode-${mode}`}>{modeLabel}</span>
         <span
           className={`pill ${dbStatus === 'ok' ? 'on' : ''} ${dbStatus === 'error' ? 'mode-recording' : ''}`}
         >
@@ -98,21 +125,53 @@ export function ControlPanel({
       {statusMessage && <p className="flash">{statusMessage}</p>}
 
       <section className="block">
-        <h2>錄製手勢</h2>
-        <p className="hint">儲存後會自動同步到資料庫，所有遊戲都可使用。</p>
-        <label className="field">
-          <span>名稱</span>
-          <input
-            value={draftName}
-            onChange={(e) => onDraftNameChange(e.target.value)}
-            placeholder="例如：握拳、剪刀手"
-            disabled={mode === 'recording'}
-          />
-        </label>
+        <h2>測試手勢</h2>
+        <p className="hint">開啟相機即時比對已儲存手勢，確認辨識是否準確。</p>
+        <div className="actions">
+          {!isListening ? (
+            <button
+              type="button"
+              className="primary"
+              disabled={gestures.length === 0 || isRecording}
+              onClick={onStartListen}
+            >
+              開始測試
+            </button>
+          ) : (
+            <button type="button" className="danger" onClick={onStopListen}>
+              停止測試
+            </button>
+          )}
+        </div>
+        {lastMatch && (
+          <p className="flash success">
+            最近辨識：{lastMatch.gestureName}（{Math.round(lastMatch.score * 100)}%）
+          </p>
+        )}
+      </section>
+
+      <section className="block">
+        <h2>{isTraining ? `加訓練：${trainTargetName}` : '錄製手勢'}</h2>
+        <p className="hint">
+          {isTraining
+            ? `再錄一次「${trainTargetName}」，加入樣本可提升辨識率（最多 ${MAX_SAMPLES} 樣本）。`
+            : '儲存後會自動同步到資料庫。也可對已有手勢按「加訓練」重複錄製。'}
+        </p>
+        {!isTraining && (
+          <label className="field">
+            <span>名稱</span>
+            <input
+              value={draftName}
+              onChange={(e) => onDraftNameChange(e.target.value)}
+              placeholder="例如：握拳、剪刀手"
+              disabled={busy}
+            />
+          </label>
+        )}
 
         <div className="actions">
-          {mode !== 'recording' ? (
-            <button type="button" className="primary" onClick={onStartRecord}>
+          {!isRecording ? (
+            <button type="button" className="primary" disabled={isListening} onClick={onStartRecord}>
               開始錄製
             </button>
           ) : (
@@ -120,14 +179,30 @@ export function ControlPanel({
               停止並預覽
             </button>
           )}
-          <button
-            type="button"
-            className="secondary"
-            disabled={!canSave || mode === 'recording'}
-            onClick={onSave}
-          >
-            儲存到手勢庫
-          </button>
+          {isTraining ? (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                disabled={!canSave || busy}
+                onClick={onAddSample}
+              >
+                加入訓練
+              </button>
+              <button type="button" className="text-btn" disabled={busy} onClick={onCancelTrain}>
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="secondary"
+              disabled={!canSave || busy}
+              onClick={onSave}
+            >
+              儲存到手勢庫
+            </button>
+          )}
         </div>
       </section>
 
@@ -149,8 +224,22 @@ export function ControlPanel({
           <ul className="gesture-list">
             {gestures.map((g) => {
               const isEditing = editingId === g.id
+              const samples = sampleCount(g)
+              const atLimit = samples >= MAX_SAMPLES
+              const matched = lastMatch?.gestureId === g.id
               return (
-                <li key={g.id} className={isEditing ? 'editing' : ''}>
+                <li
+                  key={g.id}
+                  className={
+                    isEditing
+                      ? 'editing'
+                      : trainTargetId === g.id
+                        ? 'training'
+                        : matched
+                          ? 'matched'
+                          : ''
+                  }
+                >
                   {isEditing ? (
                     <div className="edit-form">
                       <label className="field">
@@ -173,14 +262,33 @@ export function ControlPanel({
                   ) : (
                     <>
                       <div>
-                        <strong>{g.name}</strong>
-                        <span>{g.frames.length} 幀</span>
+                        <strong>
+                          {g.name}
+                          {matched ? ' ✓' : ''}
+                        </strong>
+                        <span>
+                          {samples} 樣本 · {g.frames.length} 幀
+                          {atLimit ? '（已滿）' : ''}
+                          {matched ? ` · ${Math.round(lastMatch.score * 100)}%` : ''}
+                        </span>
                       </div>
                       <div className="row-actions">
-                        <button type="button" onClick={() => startEdit(g)}>
+                        <button
+                          type="button"
+                          disabled={atLimit || busy}
+                          onClick={() => onStartTrain(g.id)}
+                        >
+                          加訓練
+                        </button>
+                        <button type="button" disabled={busy} onClick={() => startEdit(g)}>
                           改名
                         </button>
-                        <button type="button" className="danger-text" onClick={() => onDelete(g.id)}>
+                        <button
+                          type="button"
+                          className="danger-text"
+                          disabled={busy}
+                          onClick={() => onDelete(g.id)}
+                        >
                           刪除
                         </button>
                       </div>

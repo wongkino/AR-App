@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { fetchGestures, pushGestures } from './lib/api'
+import { MAX_SAMPLES, sampleCount } from './lib/gestureSamples'
+import { GestureMatcher } from './lib/matcher'
 import {
   createId,
   loadGestures,
@@ -9,7 +11,7 @@ import {
   saveGesturesLocal,
   sharedGesturesForDb,
 } from './lib/storage'
-import type { AppMode, HandFrame, SavedGesture } from './types'
+import type { AppMode, HandFrame, MatchResult, SavedGesture } from './types'
 import './App.css'
 
 const DEFAULT_REACTION = {
@@ -28,12 +30,17 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
   const [dbStatus, setDbStatus] = useState<DbStatus>('loading')
+  const [trainTargetId, setTrainTargetId] = useState<string | null>(null)
+  const [lastMatch, setLastMatch] = useState<MatchResult | null>(null)
+  const [matchFlash, setMatchFlash] = useState<string | null>(null)
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
   const recordBuf = useRef<HandFrame[]>([])
+  const matcherRef = useRef(new GestureMatcher())
   const skipNextPush = useRef(false)
   const pushTimer = useRef<number | null>(null)
+  const matchFlashTimer = useRef<number | null>(null)
 
   useEffect(() => {
     modeRef.current = mode
@@ -48,6 +55,10 @@ export default function App() {
     setStatusMessage(msg)
     window.setTimeout(() => setStatusMessage(null), 2800)
   }, [])
+
+  const trainTarget = trainTargetId
+    ? (gestures.find((g) => g.id === trainTargetId) ?? null)
+    : null
 
   const reloadFromDb = useCallback(async () => {
     setDbStatus('loading')
@@ -89,10 +100,25 @@ export default function App() {
   }, [gestures])
 
   const onFrame = useCallback((frame: HandFrame | null) => {
-    if (!frame || modeRef.current !== 'recording') return
-    recordBuf.current.push(frame)
-    setRecordingCount(recordBuf.current.length)
-  }, [])
+    if (!frame) return
+    if (modeRef.current === 'recording') {
+      recordBuf.current.push(frame)
+      setRecordingCount(recordBuf.current.length)
+      return
+    }
+    if (modeRef.current !== 'listening') return
+
+    const matcher = matcherRef.current
+    matcher.push(frame)
+    const match = matcher.tryMatch(gesturesRef.current)
+    if (!match) return
+
+    setLastMatch(match)
+    setMatchFlash(match.gestureName)
+    if (matchFlashTimer.current) window.clearTimeout(matchFlashTimer.current)
+    matchFlashTimer.current = window.setTimeout(() => setMatchFlash(null), 1400)
+    flash(`辨識到「${match.gestureName}」（${Math.round(match.score * 100)}%）`)
+  }, [flash])
 
   const { videoRef, canvasRef, ready, error, startCamera, stopCamera } = useHandLandmarker(onFrame)
 
@@ -103,6 +129,8 @@ export default function App() {
   }, [cameraOn, startCamera])
 
   const onStartRecord = useCallback(async () => {
+    matcherRef.current.clear()
+    setMatchFlash(null)
     setPendingFrames(null)
     recordBuf.current = []
     setRecordingCount(0)
@@ -114,8 +142,8 @@ export default function App() {
         block: 'start',
       })
     })
-    flash('開始錄製手勢')
-  }, [ensureCamera, flash])
+    flash(trainTargetId ? '開始加訓練樣本' : '開始錄製手勢')
+  }, [ensureCamera, flash, trainTargetId])
 
   const onStopRecord = useCallback(() => {
     const frames = [...recordBuf.current]
@@ -129,7 +157,41 @@ export default function App() {
       return
     }
     setPendingFrames(frames)
-    flash(`已擷取 ${frames.length} 幀，可按「儲存到手勢庫」`)
+    flash(
+      trainTargetId
+        ? `已擷取 ${frames.length} 幀，可按「加入訓練」`
+        : `已擷取 ${frames.length} 幀，可按「儲存到手勢庫」`,
+    )
+  }, [flash, stopCamera, trainTargetId])
+
+  const onStartListen = useCallback(async () => {
+    if (gesturesRef.current.length === 0) {
+      flash('請先儲存至少一個手勢')
+      return
+    }
+    setPendingFrames(null)
+    setTrainTargetId(null)
+    matcherRef.current.clear()
+    setLastMatch(null)
+    setMatchFlash(null)
+    setMode('listening')
+    await ensureCamera()
+    window.requestAnimationFrame(() => {
+      document.getElementById('camera-viewport')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+    flash('測試中 — 對住鏡頭做手勢')
+  }, [ensureCamera, flash])
+
+  const onStopListen = useCallback(() => {
+    matcherRef.current.clear()
+    setMatchFlash(null)
+    setMode('idle')
+    stopCamera()
+    setCameraOn(false)
+    flash('已停止測試')
   }, [flash, stopCamera])
 
   const onSave = useCallback(() => {
@@ -148,15 +210,70 @@ export default function App() {
     setGestures((prev) => [next, ...prev])
     setPendingFrames(null)
     setDraftName('')
+    setTrainTargetId(null)
     flash(`已儲存「${name}」到手勢庫`)
   }, [pendingFrames, draftName, gestures.length, flash])
+
+  const onAddSample = useCallback(() => {
+    if (!pendingFrames || pendingFrames.length < 10) {
+      flash('請先錄製一段手勢')
+      return
+    }
+    if (!trainTargetId) {
+      flash('請先選擇要加訓練的手勢')
+      return
+    }
+    const target = gesturesRef.current.find((g) => g.id === trainTargetId)
+    if (!target) {
+      flash('找不到該手勢')
+      setTrainTargetId(null)
+      return
+    }
+    if (sampleCount(target) >= MAX_SAMPLES) {
+      flash(`每個手勢最多 ${MAX_SAMPLES} 個樣本`)
+      return
+    }
+    setGestures((prev) =>
+      prev.map((g) => {
+        if (g.id !== trainTargetId) return g
+        return {
+          ...g,
+          samples: [...(g.samples ?? []), pendingFrames],
+        }
+      }),
+    )
+    setPendingFrames(null)
+    flash(`已加入「${target.name}」訓練（現共 ${sampleCount(target) + 1} 樣本）`)
+  }, [pendingFrames, trainTargetId, flash])
+
+  const onStartTrain = useCallback(
+    (id: string) => {
+      const target = gesturesRef.current.find((g) => g.id === id)
+      if (!target) return
+      if (sampleCount(target) >= MAX_SAMPLES) {
+        flash(`「${target.name}」已達 ${MAX_SAMPLES} 樣本上限`)
+        return
+      }
+      setTrainTargetId(id)
+      setDraftName(target.name)
+      setPendingFrames(null)
+      flash(`已選「${target.name}」— 錄製後按「加入訓練」`)
+    },
+    [flash],
+  )
+
+  const onCancelTrain = useCallback(() => {
+    setTrainTargetId(null)
+    flash('已取消加訓練')
+  }, [flash])
 
   const onDelete = useCallback(
     (id: string) => {
       setGestures((prev) => prev.filter((g) => g.id !== id))
+      if (trainTargetId === id) setTrainTargetId(null)
       flash('已刪除手勢')
     },
-    [flash],
+    [flash, trainTargetId],
   )
 
   const onUpdate = useCallback(
@@ -170,21 +287,36 @@ export default function App() {
   )
 
   useEffect(() => {
-    return () => stopCamera()
+    return () => {
+      stopCamera()
+      if (matchFlashTimer.current) window.clearTimeout(matchFlashTimer.current)
+    }
   }, [stopCamera])
 
+  const cameraActive = mode === 'recording' || mode === 'listening'
+
   return (
-    <div className={`app${mode === 'recording' ? ' is-recording' : ''}`}>
+    <div className={`app${cameraActive ? ' is-recording' : ''}`}>
       <div className="stage">
         <div className="stage-bg" aria-hidden />
         <div className="viewport" id="camera-viewport">
-          {mode !== 'recording' && (
+          {!cameraActive && (
             <div className="camera-gate">
-              <h2>手勢錄製</h2>
-              <p>按「開始錄製」後會開啟相機，完成手勢後停止並儲存。</p>
+              <h2>
+                {trainTarget
+                  ? `加訓練：${trainTarget.name}`
+                  : lastMatch
+                    ? '測試手勢'
+                    : '手勢錄製'}
+              </h2>
+              <p>
+                {trainTarget
+                  ? '再錄一次同一動作，加入樣本可提升辨識率。'
+                  : '可錄製新手勢，或按「測試手勢」驗證辨識是否準確。'}
+              </p>
             </div>
           )}
-          {mode === 'recording' && (
+          {cameraActive && (
             <>
               {!cameraOn && (
                 <div className="camera-gate">
@@ -200,10 +332,19 @@ export default function App() {
                 disablePictureInPicture
               />
               <canvas ref={canvasRef} className="overlay" />
-              <div className="rec-badge">REC · {recordingCount}</div>
-              <button type="button" className="rec-stop" onClick={onStopRecord}>
-                停止並預覽
-              </button>
+              {mode === 'recording' && <div className="rec-badge">REC · {recordingCount}</div>}
+              {mode === 'listening' && <div className="listen-badge">TEST</div>}
+              {matchFlash && <div className="match-flash">{matchFlash}</div>}
+              {mode === 'recording' && (
+                <button type="button" className="rec-stop" onClick={onStopRecord}>
+                  停止並預覽
+                </button>
+              )}
+              {mode === 'listening' && (
+                <button type="button" className="listen-stop" onClick={onStopListen}>
+                  停止測試
+                </button>
+              )}
             </>
           )}
         </div>
@@ -222,6 +363,14 @@ export default function App() {
         onStopRecord={onStopRecord}
         canSave={!!pendingFrames && pendingFrames.length >= 10}
         onSave={onSave}
+        trainTargetId={trainTargetId}
+        trainTargetName={trainTarget?.name ?? null}
+        onAddSample={onAddSample}
+        onStartTrain={onStartTrain}
+        onCancelTrain={onCancelTrain}
+        onStartListen={() => void onStartListen()}
+        onStopListen={onStopListen}
+        lastMatch={lastMatch}
         gestures={gestures}
         onDelete={onDelete}
         onUpdate={onUpdate}

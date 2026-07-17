@@ -1,4 +1,5 @@
 import { dtwDistance, MATCH_THRESHOLD, similarityFromDistance } from '../lib/dtw'
+import { gestureTemplates } from '../lib/gestureSamples'
 import type { HandFrame, MatchResult, SavedGesture } from '../types'
 
 const WINDOW_MS = 1800
@@ -33,9 +34,14 @@ export class GestureMatcher {
     let best: MatchResult | null = null
 
     for (const g of gestures) {
-      if (g.frames.length < 4) continue
-      const distance = dtwDistance(live, g.frames)
-      const score = similarityFromDistance(distance)
+      const templates = gestureTemplates(g)
+      if (templates.length === 0) continue
+
+      let score = 0
+      for (const template of templates) {
+        const s = similarityFromDistance(dtwDistance(live, template))
+        if (s > score) score = s
+      }
       if (score < MATCH_THRESHOLD) continue
       if (!best || score > best.score) {
         best = { gestureId: g.id, gestureName: g.name, score }

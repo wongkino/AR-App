@@ -8,9 +8,21 @@ export function loadGestures(): SavedGesture[] {
     const raw = localStorage.getItem(GESTURES_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as SavedGesture[]
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.map(normalizeGesture)
   } catch {
     return []
+  }
+}
+
+function normalizeGesture(g: SavedGesture): SavedGesture {
+  const samples = Array.isArray(g.samples)
+    ? g.samples.filter((s) => Array.isArray(s) && s.length >= 4)
+    : undefined
+  return {
+    ...g,
+    frames: Array.isArray(g.frames) ? g.frames : [],
+    samples: samples && samples.length > 0 ? samples : undefined,
   }
 }
 
@@ -24,7 +36,7 @@ export function mergeRemoteGestures(
   current: SavedGesture[],
 ): SavedGesture[] {
   const localOnly = current.filter((g) => g.localOnly)
-  const shared = remote.map((g) => ({ ...g, localOnly: undefined }))
+  const shared = remote.map((g) => ({ ...normalizeGesture(g), localOnly: undefined }))
   return [...localOnly, ...shared]
 }
 

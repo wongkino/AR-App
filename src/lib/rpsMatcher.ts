@@ -29,7 +29,7 @@ export class RpsGestureMatcher {
     this.lastMatchAt = 0
   }
 
-  tryMatch(loadout: RpsLoadout, gestureFrames: Map<string, HandFrame[]>): RpsMatch | null {
+  tryMatch(loadout: RpsLoadout, gestureTemplatesMap: Map<string, HandFrame[][]>): RpsMatch | null {
     if (this.buffer.length < 6) return null
 
     const now = performance.now()
@@ -42,11 +42,15 @@ export class RpsGestureMatcher {
     for (const move of moves) {
       const gestureId = loadout[move]
       if (!gestureId) continue
-      const frames = gestureFrames.get(gestureId)
-      if (!frames || frames.length < 4) continue
+      const templates = gestureTemplatesMap.get(gestureId)
+      if (!templates || templates.length === 0) continue
 
-      const distance = dtwDistance(live, frames)
-      const score = similarityFromDistance(distance)
+      let score = 0
+      for (const template of templates) {
+        if (template.length < 4) continue
+        const s = similarityFromDistance(dtwDistance(live, template))
+        if (s > score) score = s
+      }
       if (score < MATCH_THRESHOLD) continue
       if (!best || score > best.score) {
         best = { move, gestureId, score }

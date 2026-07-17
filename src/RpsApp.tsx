@@ -3,6 +3,7 @@ import { RpsArena } from './components/rps/RpsArena'
 import { RpsLobby } from './components/rps/RpsLobby'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { fetchGestures } from './lib/api'
+import { gestureTemplates } from './lib/gestureSamples'
 import { RpsGestureMatcher } from './lib/rpsMatcher'
 import { RpsSocket } from './lib/rpsSocket'
 import { playCountdownTick, playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
@@ -63,8 +64,8 @@ export default function RpsApp() {
   }, [loadout])
 
   const gestureFrames = useMemo(() => {
-    const map = new Map<string, HandFrame[]>()
-    for (const g of gestures) map.set(g.id, g.frames)
+    const map = new Map<string, ReturnType<typeof gestureTemplates>>()
+    for (const g of gestures) map.set(g.id, gestureTemplates(g))
     return map
   }, [gestures])
 

@@ -5,6 +5,7 @@ import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { fetchGestures } from './lib/api'
 import { FightGestureMatcher } from './lib/fightMatcher'
 import { FightSocket } from './lib/gameSocket'
+import { gestureTemplates } from './lib/gestureSamples'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
 import type { MoveLoadout, MoveType, PublicRoomState } from './game/types'
 import { MOVE_LABELS } from './game/types'
@@ -67,8 +68,8 @@ export default function FightApp() {
   }, [loadout])
 
   const gestureFrames = useMemo(() => {
-    const map = new Map<string, HandFrame[]>()
-    for (const g of gestures) map.set(g.id, g.frames)
+    const map = new Map<string, ReturnType<typeof gestureTemplates>>()
+    for (const g of gestures) map.set(g.id, gestureTemplates(g))
     return map
   }, [gestures])
 

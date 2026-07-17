@@ -131,6 +131,42 @@
   color: #062a28;
 }
 
+.listen-stop {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 999px;
+  min-height: 48px;
+  padding: 0.75rem 1.35rem;
+  background: var(--accent, #0f766e);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.match-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  font-family: var(--display);
+  font-size: clamp(1.8rem, 6vw, 2.8rem);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+  background: radial-gradient(circle at center, rgba(15, 118, 110, 0.35), transparent 65%);
+  animation: fade-in 0.2s ease;
+}
+
 .audio-unlock {
   position: absolute;
   left: 50%;
@@ -459,6 +495,16 @@ button:disabled {
 .gesture-list li.editing {
   flex-direction: column;
   align-items: stretch;
+}
+
+.gesture-list li.training {
+  border-color: var(--accent, #2a9d8f);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #2a9d8f) 40%, transparent);
+}
+
+.gesture-list li.matched {
+  border-color: rgba(27, 127, 90, 0.55);
+  background: rgba(27, 127, 90, 0.1);
 }
 
 .edit-form {

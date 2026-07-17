@@ -19,6 +19,11 @@ export async function initDb(): Promise<void> {
     );
   `)
 
+  await pool.query(`
+    ALTER TABLE gestures
+    ADD COLUMN IF NOT EXISTS samples JSONB NOT NULL DEFAULT '[]'::jsonb;
+  `)
+
   // Migrate away from sync-key / workspace schema if present
   await pool.query(`
     DO $$

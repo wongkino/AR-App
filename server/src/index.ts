@@ -14,6 +14,7 @@ type GestureBody = {
   id: string
   name: string
   frames: unknown
+  samples?: unknown
   reaction: unknown
   createdAt: number
 }
@@ -86,10 +87,11 @@ app.get('/api/gestures', async (c) => {
     id: string
     name: string
     frames: unknown
+    samples: unknown
     reaction: unknown
     created_at: string
   }>(
-    `SELECT id, name, frames, reaction, created_at
+    `SELECT id, name, frames, samples, reaction, created_at
      FROM gestures
      ORDER BY created_at DESC`,
   )
@@ -99,6 +101,7 @@ app.get('/api/gestures', async (c) => {
       id: row.id,
       name: row.name,
       frames: row.frames,
+      samples: Array.isArray(row.samples) ? row.samples : [],
       reaction: row.reaction,
       createdAt: Number(row.created_at),
     })),
@@ -120,13 +123,15 @@ app.put('/api/gestures', requireAdmin, async (c) => {
       if (!g?.id || !g.name || !g.frames || !g.reaction) {
         throw new Error('INVALID_GESTURE')
       }
+      const samples = Array.isArray(g.samples) ? g.samples : []
       await client.query(
-        `INSERT INTO gestures (id, name, frames, reaction, created_at)
-         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)`,
+        `INSERT INTO gestures (id, name, frames, samples, reaction, created_at)
+         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6)`,
         [
           g.id,
           g.name,
           JSON.stringify(g.frames),
+          JSON.stringify(samples),
           JSON.stringify(g.reaction),
           g.createdAt ?? Date.now(),
         ],

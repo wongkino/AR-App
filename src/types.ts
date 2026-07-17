@@ -16,7 +16,10 @@ export type Reaction =
 export type SavedGesture = {
   id: string
   name: string
+  /** Primary training take (always present; used by older clients). */
   frames: HandFrame[]
+  /** Extra takes of the same gesture; matcher uses best match across all. */
+  samples?: HandFrame[][]
   reaction: Reaction
   createdAt: number
   /** 本機試用：只存在瀏覽器，不會寫入資料庫 */
