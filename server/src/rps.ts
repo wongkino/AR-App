@@ -1,5 +1,7 @@
 import type { WSContext } from 'hono/ws'
 
+export type MatchFormat = 'bo3' | 'bo5'
+
 export type RpsMove = 'rock' | 'scissors' | 'paper'
 
 export type RpsLoadout = Record<RpsMove, string | null>
@@ -35,6 +37,7 @@ export type RpsRoomState = {
   phase: RoomPhase
   players: RpsPlayerState[]
   winnerId: string | null
+  matchFormat: MatchFormat
   round: number
   roundPhase: RoundPhase | null
   countdown: number | null
@@ -46,6 +49,7 @@ export type RpsRoomState = {
 
 export type ClientMessage =
   | { type: 'join'; roomCode?: string; playerName: string }
+  | { type: 'set_format'; format: MatchFormat }
   | { type: 'ready'; loadout: RpsLoadout }
   | { type: 'throw'; move: RpsMove; gestureId: string; score: number }
   | { type: 'leave' }
@@ -72,6 +76,8 @@ export type PublicRpsRoom = {
   phase: RoomPhase
   players: PublicRpsPlayer[]
   winnerId: string | null
+  matchFormat: MatchFormat
+  winTarget: number
   round: number
   roundPhase: RoundPhase | null
   countdown: number | null
@@ -86,7 +92,15 @@ const MOVE_LABELS: Record<RpsMove, string> = {
   paper: '揼',
 }
 
-const WIN_SCORE = 3
+const DEFAULT_MATCH_FORMAT: MatchFormat = 'bo3'
+
+function winTargetFor(format: MatchFormat): number {
+  return format === 'bo3' ? 2 : 3
+}
+
+function formatLabel(format: MatchFormat): string {
+  return format === 'bo3' ? '三盤兩勝' : '五盤三勝'
+}
 const COUNTDOWN_SEC = 3
 const THROW_MS = 5000
 const REVEAL_MS = 2800
@@ -151,6 +165,8 @@ function toPublicRoom(room: RpsRoomState): PublicRpsRoom {
     phase: room.phase,
     players: room.players.map(toPublicPlayer),
     winnerId: room.winnerId,
+    matchFormat: room.matchFormat,
+    winTarget: winTargetFor(room.matchFormat),
     round: room.round,
     roundPhase: room.roundPhase,
     countdown: room.countdown,
@@ -204,6 +220,9 @@ export class RpsHub {
       case 'join':
         this.handleJoin(ws, msg.roomCode?.trim().toUpperCase() || '', msg.playerName)
         break
+      case 'set_format':
+        this.handleSetFormat(ws, msg.format)
+        break
       case 'ready':
         this.handleReady(ws, msg.loadout)
         break
@@ -243,6 +262,7 @@ export class RpsHub {
         phase: 'lobby',
         players: [],
         winnerId: null,
+        matchFormat: DEFAULT_MATCH_FORMAT,
         round: 0,
         roundPhase: null,
         countdown: null,
@@ -271,6 +291,33 @@ export class RpsHub {
 
     this.connections.set(ws, { playerId: player.id, roomCode: room.code, ws })
     this.send(ws, { type: 'joined', room: toPublicRoom(room), playerId: player.id })
+    this.broadcastRoom(room.code)
+  }
+
+  private handleSetFormat(ws: WSContext, format: MatchFormat): void {
+    const ctx = this.requireConnection(ws)
+    if (!ctx) return
+    const room = this.rooms.get(ctx.roomCode)
+    if (!room || room.phase !== 'lobby') return
+
+    if (room.players[0]?.id !== ctx.playerId) {
+      this.send(ws, { type: 'error', message: '只有房主可以更改賽制' })
+      return
+    }
+
+    if (format !== 'bo3' && format !== 'bo5') {
+      this.send(ws, { type: 'error', message: '無效的賽制' })
+      return
+    }
+
+    if (room.players.some((p) => p.ready)) {
+      this.send(ws, { type: 'error', message: '已有玩家準備，無法更改賽制' })
+      return
+    }
+
+    room.matchFormat = format
+    room.updatedAt = Date.now()
+    room.log.push(makeLog(`賽制已設為 ${formatLabel(format)}`))
     this.broadcastRoom(room.code)
   }
 
@@ -315,7 +362,7 @@ export class RpsHub {
       player.score = 0
       player.lockedMove = null
     }
-    room.log.push(makeLog('包剪揼對戰開始！先贏 3 分者勝'))
+    room.log.push(makeLog(`包剪揼對戰開始！${formatLabel(room.matchFormat)}（先贏 ${winTargetFor(room.matchFormat)} 局）`))
     room.updatedAt = Date.now()
     this.broadcastRoom(room.code)
     this.scheduleRound(room.code)
@@ -449,11 +496,12 @@ export class RpsHub {
     room.lastResult = result
     room.log.push(makeLog(text))
 
-    if (a.score >= WIN_SCORE) {
+    const target = winTargetFor(room.matchFormat)
+    if (a.score >= target) {
       room.phase = 'finished'
       room.winnerId = a.id
       room.log.push(makeLog(`${a.name} 贏得整場對戰！`))
-    } else if (b.score >= WIN_SCORE) {
+    } else if (b.score >= target) {
       room.phase = 'finished'
       room.winnerId = b.id
       room.log.push(makeLog(`${b.name} 贏得整場對戰！`))

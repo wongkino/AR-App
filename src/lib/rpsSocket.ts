@@ -1,4 +1,4 @@
-import type { PublicRpsRoom, RpsLoadout, ServerMessage } from '../game/rpsTypes'
+import type { MatchFormat, PublicRpsRoom, RpsLoadout, ServerMessage } from '../game/rpsTypes'
 
 type Handlers = {
   onOpen?: () => void
@@ -71,6 +71,10 @@ export class RpsSocket {
 
   join(roomCode: string | undefined, playerName: string): void {
     this.send({ type: 'join', roomCode, playerName })
+  }
+
+  setFormat(format: MatchFormat): void {
+    this.send({ type: 'set_format', format })
   }
 
   ready(loadout: RpsLoadout): void {

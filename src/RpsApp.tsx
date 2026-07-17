@@ -251,6 +251,7 @@ export default function RpsApp() {
         onJoinRoom={onJoinRoom}
         onReady={onReady}
         onRematch={() => socketRef.current.rematch()}
+        onFormatChange={(format) => socketRef.current.setFormat(format)}
       />
     </div>
   )

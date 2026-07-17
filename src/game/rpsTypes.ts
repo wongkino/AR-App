@@ -1,3 +1,5 @@
+export type MatchFormat = 'bo3' | 'bo5'
+
 export type RpsMove = 'rock' | 'scissors' | 'paper'
 
 export type RpsLoadout = Record<RpsMove, string | null>
@@ -33,6 +35,8 @@ export type PublicRpsRoom = {
   phase: RoomPhase
   players: PublicRpsPlayer[]
   winnerId: string | null
+  matchFormat: MatchFormat
+  winTarget: number
   round: number
   roundPhase: RoundPhase | null
   countdown: number | null
@@ -64,4 +68,13 @@ export const RPS_EMOJI: Record<RpsMove, string> = {
   rock: '✊',
   scissors: '✌️',
   paper: '✋',
+}
+
+export const MATCH_FORMAT_LABELS: Record<MatchFormat, string> = {
+  bo3: '三盤兩勝（先贏 2 局）',
+  bo5: '五盤三勝（先贏 3 局）',
+}
+
+export function winTargetFor(format: MatchFormat): number {
+  return format === 'bo3' ? 2 : 3
 }
