@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.3.0] - 2026-07-17
+
+- feat: use shared database directly instead of sync codes (150b0bc)
+
 ## [v0.2.1] - 2026-07-17
 
 - fix: use list-form depends_on for Portainer compose parser (d1f663c)
