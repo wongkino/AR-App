@@ -188,12 +188,14 @@ export default function App() {
     setCameraOn(true)
   }, [cameraOn, startCamera])
 
-  /** iPhone/iPad 必須由使用者點擊才能解鎖語音 */
-  const enableAudio = useCallback(async () => {
-    await unlockAudio()
-    await resumePreview()
-    setAudioReady(true)
-  }, [resumePreview])
+  const enableAudio = useCallback(
+    async (opts?: { beep?: boolean }) => {
+      await unlockAudio({ beep: opts?.beep === true })
+      await resumePreview()
+      setAudioReady(true)
+    },
+    [resumePreview],
+  )
 
   const onStartListen = useCallback(async () => {
     stopReactions()
@@ -201,21 +203,52 @@ export default function App() {
     setLastTriggered(null)
     setMode('listening')
     await ensureCamera()
-  }, [ensureCamera])
+    // Auto-enable sound with camera (works on desktop; iOS may need first tap)
+    if (!isAudioUnlocked()) {
+      try {
+        await enableAudio({ beep: false })
+      } catch {
+        // gesture listener below will finish unlock on first tap
+      }
+    }
+  }, [ensureCamera, enableAudio])
 
   const onStartListenWithAudio = useCallback(async () => {
     try {
-      await enableAudio()
+      await enableAudio({ beep: false })
     } catch {
-      // still start camera/listen; banner will ask again
+      // still start camera/listen
     }
     await onStartListen()
-    if (isAudioUnlocked()) {
-      flash('監聽中，語音已啟用')
-    } else {
-      flash('監聽中。請再點畫面「啟用語音」')
+  }, [enableAudio, onStartListen])
+
+  // Open-page auto unlock attempt once camera is on
+  useEffect(() => {
+    if (!cameraOn || audioReady) return
+    void enableAudio({ beep: false }).catch(() => undefined)
+  }, [cameraOn, audioReady, enableAudio])
+
+  // iOS: first tap/key anywhere finishes audio unlock automatically
+  useEffect(() => {
+    if (audioReady) return
+
+    const onGesture = () => {
+      if (isAudioUnlocked()) {
+        setAudioReady(true)
+        return
+      }
+      void enableAudio({ beep: false }).catch(() => undefined)
     }
-  }, [enableAudio, onStartListen, flash])
+
+    document.addEventListener('pointerdown', onGesture, { capture: true })
+    document.addEventListener('touchstart', onGesture, { capture: true })
+    document.addEventListener('keydown', onGesture, { capture: true })
+    return () => {
+      document.removeEventListener('pointerdown', onGesture, true)
+      document.removeEventListener('touchstart', onGesture, true)
+      document.removeEventListener('keydown', onGesture, true)
+    }
+  }, [audioReady, enableAudio])
 
   const onUnlock = useCallback(async () => {
     const password = passwordInput.trim()
@@ -363,8 +396,7 @@ export default function App() {
       void (async () => {
         try {
           if (!isAudioUnlocked()) {
-            await enableAudio()
-            setAudioReady(true)
+            await enableAudio({ beep: false })
           }
           await runReaction(g.reaction)
         } catch (err: unknown) {
@@ -390,14 +422,14 @@ export default function App() {
           {!cameraOn && (
             <div className="camera-gate">
               <h2>{ready ? '正在開啟相機…' : '載入模型中…'}</h2>
-              <p>開頁後會自動開始監聽。iPhone / iPad 請點下方按鈕以同時啟用語音。</p>
+              <p>開頁後會自動開始監聽與語音。若瀏覽器要求授權，請按下方按鈕。</p>
               <button
                 type="button"
                 className="primary"
                 disabled={!ready}
                 onClick={() => void onStartListenWithAudio()}
               >
-                {ready ? '允許相機並啟用語音' : '請稍候…'}
+                {ready ? '允許相機與語音' : '請稍候…'}
               </button>
             </div>
           )}
@@ -412,22 +444,6 @@ export default function App() {
           <canvas ref={canvasRef} className="overlay" />
           {mode === 'recording' && <div className="rec-badge">REC</div>}
           {mode === 'listening' && <div className="listen-badge">LISTEN</div>}
-          {cameraOn && !audioReady && (
-            <button
-              type="button"
-              className="audio-unlock"
-              onClick={() =>
-                void enableAudio()
-                  .then(() => {
-                    setAudioReady(true)
-                    flash('語音已啟用。可再做一次手勢')
-                  })
-                  .catch(() => flash('無法啟用語音，請確認裝置未靜音'))
-              }
-            >
-              點此啟用語音
-            </button>
-          )}
         </div>
         {(error || (!ready && !error)) && (
           <p className="stage-note">

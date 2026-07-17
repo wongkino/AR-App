@@ -266,7 +266,7 @@ export function ControlPanel({
 
       <section className="block">
         <h2>監聽</h2>
-        <p className="hint">開頁後會自動監聽。iPhone / iPad 需再點畫面「啟用語音」才會朗讀。</p>
+        <p className="hint">開頁後會自動監聽並啟用語音。若裝置仍無聲，點一下畫面即可。</p>
         <div className="actions">
           {mode !== 'listening' ? (
             <button

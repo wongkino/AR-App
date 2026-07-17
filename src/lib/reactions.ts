@@ -72,13 +72,19 @@ function playUnlockBeep(ctx: AudioContext): void {
   osc.stop(ctx.currentTime + 0.15)
 }
 
+export type UnlockAudioOptions = {
+  /** Short confirmation beep; off by default for auto-start. */
+  beep?: boolean
+}
+
 /**
- * Must be called from a user gesture (tap/click).
- * Never use speechSynthesis here while the camera is running — on iOS it
- * pauses the <video> element and/or breaks MediaPipe's detect loop.
+ * Unlock HTMLAudio / AudioContext for later gesture TTS.
+ * Best called from a user gesture on iOS; desktop often works without one.
+ * Never use audible speechSynthesis here while the camera is running.
  */
-export async function unlockAudio(): Promise<void> {
+export async function unlockAudio(options?: UnlockAudioOptions): Promise<void> {
   if (typeof window === 'undefined') return
+  const beep = options?.beep === true
 
   try {
     const silent = new Audio(SILENT_WAV)
@@ -97,7 +103,16 @@ export async function unlockAudio(): Promise<void> {
       if (unlockAudioContext.state === 'suspended') {
         await unlockAudioContext.resume()
       }
-      playUnlockBeep(unlockAudioContext)
+      if (beep) {
+        playUnlockBeep(unlockAudioContext)
+      } else {
+        // Silent buffer still marks the context as running / unlocked
+        const buffer = unlockAudioContext.createBuffer(1, 1, 22050)
+        const source = unlockAudioContext.createBufferSource()
+        source.buffer = buffer
+        source.connect(unlockAudioContext.destination)
+        source.start(0)
+      }
     }
   } catch {
     // ignore
