@@ -271,7 +271,13 @@
 }
 
 .rps-actions {
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.rps-actions > button {
+  flex: 1;
 }
 
 .rps-scores {

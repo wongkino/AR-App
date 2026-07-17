@@ -5,6 +5,7 @@ import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { fetchGestures } from './lib/api'
 import { RpsGestureMatcher } from './lib/rpsMatcher'
 import { RpsSocket } from './lib/rpsSocket'
+import { playCountdownTick, playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
 import type { PublicRpsRoom, RpsLoadout, RpsMove } from './game/rpsTypes'
 import { RPS_LABELS } from './game/rpsTypes'
@@ -108,9 +109,22 @@ export default function RpsApp() {
           setCountdown(null)
         }
       },
-      onRoundTick: (value) => setCountdown(value),
+      onRoundTick: (value) => {
+        setCountdown(value)
+        playCountdownTick(value)
+      },
       onRoundResult: (payload) => {
         setRoom(payload.room)
+        const { result, room: nextRoom } = payload
+        const meId = playerIdRef.current
+        if (!meId) return
+        if (result.winnerId === 'draw' || result.winnerId === null) {
+          playDraw()
+        } else if (result.winnerId === meId || nextRoom.winnerId === meId) {
+          playWin()
+        } else {
+          playLose()
+        }
       },
       onError: (message) => setError(message),
       onClose: () => setConnected(false),
@@ -170,17 +184,24 @@ export default function RpsApp() {
   const opponent = room?.players.find((p) => p.id !== playerId) ?? null
 
   const onCreateRoom = () => {
+    const code = roomCodeInput.trim()
+    if (!/^[A-Za-z0-9]{4}$/.test(code)) {
+      setError('請輸入四位英數房間代碼')
+      return
+    }
     setError(null)
-    socketRef.current.join(undefined, playerName.trim() || '玩家')
+    void unlockSfx()
+    socketRef.current.join(code, playerName.trim() || '玩家', true)
   }
 
   const onJoinRoom = () => {
     const code = roomCodeInput.trim()
-    if (!code) {
-      setError('請輸入房間代碼')
+    if (!/^[A-Za-z0-9]{4}$/.test(code)) {
+      setError('請輸入四位英數房間代碼')
       return
     }
     setError(null)
+    void unlockSfx()
     socketRef.current.join(code, playerName.trim() || '玩家')
   }
 
@@ -191,6 +212,7 @@ export default function RpsApp() {
       return
     }
     setError(null)
+    void unlockSfx()
     socketRef.current.ready(loadout)
   }
 
@@ -207,7 +229,15 @@ export default function RpsApp() {
               <h2>{ready ? '對戰需要相機' : '載入模型中…'}</h2>
               <p>開打後會自動開啟相機。倒數結束後對住鏡頭做 {RPS_LABELS.rock}／{RPS_LABELS.scissors}／{RPS_LABELS.paper}。</p>
               {room?.phase === 'playing' && (
-                <button type="button" className="primary" disabled={!ready} onClick={() => void ensureCamera()}>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!ready}
+                  onClick={() => {
+                    void unlockSfx()
+                    void ensureCamera()
+                  }}
+                >
                   開啟相機
                 </button>
               )}
@@ -253,7 +283,10 @@ export default function RpsApp() {
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
         onReady={onReady}
-        onRematch={() => socketRef.current.rematch()}
+        onRematch={() => {
+          void unlockSfx()
+          socketRef.current.rematch()
+        }}
         onFormatChange={(format) => socketRef.current.setFormat(format)}
       />
     </div>

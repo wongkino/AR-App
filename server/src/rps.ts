@@ -48,7 +48,7 @@ export type RpsRoomState = {
 }
 
 export type ClientMessage =
-  | { type: 'join'; roomCode?: string; playerName: string }
+  | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
   | { type: 'set_format'; format: MatchFormat }
   | { type: 'ready'; loadout: RpsLoadout }
   | { type: 'throw'; move: RpsMove; gestureId: string; score: number }
@@ -135,13 +135,12 @@ function createPlayer(name: string): RpsPlayerState {
   }
 }
 
-function randomRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
+function normalizeRoomCode(raw: string): string {
+  return raw.trim().toUpperCase()
+}
+
+function isValidRoomCode(code: string): boolean {
+  return /^[A-Z0-9]{4}$/.test(code)
 }
 
 function makeLog(text: string): RpsLogEntry {
@@ -191,6 +190,17 @@ function resolveMoves(moveA: RpsMove | null, moveB: RpsMove | null): 'a' | 'b' |
   return 'b'
 }
 
+function moveLabel(move: RpsMove | null): string {
+  return move ? MOVE_LABELS[move] : '未出招'
+}
+
+function winText(winnerName: string, winnerMove: RpsMove | null, loserMove: RpsMove | null): string {
+  if (!loserMove) {
+    return `${winnerName} 贏！對手未出招`
+  }
+  return `${winnerName} 贏！${moveLabel(winnerMove)} 贏 ${moveLabel(loserMove)}`
+}
+
 export class RpsHub {
   private rooms = new Map<string, RpsRoomState>()
   private connections = new Map<WSContext, Connection>()
@@ -218,7 +228,7 @@ export class RpsHub {
 
     switch (msg.type) {
       case 'join':
-        this.handleJoin(ws, msg.roomCode?.trim().toUpperCase() || '', msg.playerName)
+        this.handleJoin(ws, normalizeRoomCode(msg.roomCode || ''), msg.playerName, Boolean(msg.create))
         break
       case 'set_format':
         this.handleSetFormat(ws, msg.format)
@@ -240,25 +250,28 @@ export class RpsHub {
     }
   }
 
-  private handleJoin(ws: WSContext, requestedCode: string, playerName: string): void {
+  private handleJoin(ws: WSContext, requestedCode: string, playerName: string, create: boolean): void {
     if (this.connections.has(ws)) {
       this.send(ws, { type: 'error', message: '你已加入房間' })
       return
     }
 
-    this.pruneRooms()
-
-    let room = requestedCode ? this.rooms.get(requestedCode) : undefined
-    if (requestedCode && !room) {
-      this.send(ws, { type: 'error', message: '找不到房間代碼' })
+    if (!isValidRoomCode(requestedCode)) {
+      this.send(ws, { type: 'error', message: '房間代碼須為四位英數' })
       return
     }
 
-    if (!room) {
-      let code = randomRoomCode()
-      while (this.rooms.has(code)) code = randomRoomCode()
+    this.pruneRooms()
+
+    let room = this.rooms.get(requestedCode)
+
+    if (create) {
+      if (room) {
+        this.send(ws, { type: 'error', message: '房間代碼已被使用' })
+        return
+      }
       room = {
-        code,
+        code: requestedCode,
         phase: 'lobby',
         players: [],
         winnerId: null,
@@ -271,7 +284,10 @@ export class RpsHub {
         log: [makeLog('房間已建立，等待對手加入…')],
         updatedAt: Date.now(),
       }
-      this.rooms.set(code, room)
+      this.rooms.set(requestedCode, room)
+    } else if (!room) {
+      this.send(ws, { type: 'error', message: '找不到房間代碼' })
+      return
     }
 
     if (room.phase !== 'lobby') {
@@ -471,15 +487,15 @@ export class RpsHub {
       text = '雙方都未出招，本局作廢'
       winnerId = 'draw'
     } else if (outcome === 'draw') {
-      text = `平局！${MOVE_LABELS[a.lockedMove!]} 對 ${MOVE_LABELS[b.lockedMove!]}`
+      text = `平局！${moveLabel(a.lockedMove)} 對 ${moveLabel(b.lockedMove)}`
       winnerId = 'draw'
     } else if (outcome === 'a') {
       a.score += 1
-      text = `${a.name} 贏！${MOVE_LABELS[a.lockedMove!]} 贏 ${MOVE_LABELS[b.lockedMove!]}`
+      text = winText(a.name, a.lockedMove, b.lockedMove)
       winnerId = a.id
     } else if (outcome === 'b') {
       b.score += 1
-      text = `${b.name} 贏！${MOVE_LABELS[b.lockedMove!]} 贏 ${MOVE_LABELS[a.lockedMove!]}`
+      text = winText(b.name, b.lockedMove, a.lockedMove)
       winnerId = b.id
     }
 

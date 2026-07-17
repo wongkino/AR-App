@@ -80,8 +80,8 @@ export class FightSocket {
     return true
   }
 
-  join(roomCode: string | undefined, playerName: string): void {
-    this.send({ type: 'join', roomCode, playerName })
+  join(roomCode: string, playerName: string, create = false): void {
+    this.send({ type: 'join', roomCode, playerName, create })
   }
 
   ready(loadout: MoveLoadout): void {

@@ -178,14 +178,19 @@ export default function FightApp() {
   const opponent = room?.players.find((p) => p.id !== playerId) ?? null
 
   const onCreateRoom = () => {
+    const code = roomCodeInput.trim()
+    if (!/^[A-Za-z0-9]{4}$/.test(code)) {
+      setError('請輸入四位英數房間代碼')
+      return
+    }
     setError(null)
-    socketRef.current.join(undefined, playerName.trim() || '玩家')
+    socketRef.current.join(code, playerName.trim() || '玩家', true)
   }
 
   const onJoinRoom = () => {
     const code = roomCodeInput.trim()
-    if (!code) {
-      setError('請輸入房間代碼')
+    if (!/^[A-Za-z0-9]{4}$/.test(code)) {
+      setError('請輸入四位英數房間代碼')
       return
     }
     setError(null)

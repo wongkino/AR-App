@@ -33,7 +33,7 @@ export type FightLogEntry = {
 }
 
 export type ClientMessage =
-  | { type: 'join'; roomCode?: string; playerName: string }
+  | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
   | { type: 'ready'; loadout: MoveLoadout }
   | { type: 'attack'; move: MoveType; gestureId: string; score: number }
   | { type: 'leave' }
@@ -125,13 +125,12 @@ function toPublicRoom(room: RoomState): PublicRoomState {
   }
 }
 
-function randomRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
+function normalizeRoomCode(raw: string): string {
+  return raw.trim().toUpperCase()
+}
+
+function isValidRoomCode(code: string): boolean {
+  return /^[A-Z0-9]{4}$/.test(code)
 }
 
 function makeLog(text: string): FightLogEntry {
@@ -164,7 +163,7 @@ export class GameHub {
 
     switch (msg.type) {
       case 'join':
-        this.handleJoin(ws, msg.roomCode?.trim().toUpperCase() || '', msg.playerName)
+        this.handleJoin(ws, normalizeRoomCode(msg.roomCode || ''), msg.playerName, Boolean(msg.create))
         break
       case 'ready':
         this.handleReady(ws, msg.loadout)
@@ -183,32 +182,38 @@ export class GameHub {
     }
   }
 
-  private handleJoin(ws: WSContext, requestedCode: string, playerName: string): void {
+  private handleJoin(ws: WSContext, requestedCode: string, playerName: string, create: boolean): void {
     if (this.connections.has(ws)) {
       this.send(ws, { type: 'error', message: '你已加入房間' })
       return
     }
 
-    this.pruneRooms()
-
-    let room = requestedCode ? this.rooms.get(requestedCode) : undefined
-    if (requestedCode && !room) {
-      this.send(ws, { type: 'error', message: '找不到房間代碼' })
+    if (!isValidRoomCode(requestedCode)) {
+      this.send(ws, { type: 'error', message: '房間代碼須為四位英數' })
       return
     }
 
-    if (!room) {
-      let code = randomRoomCode()
-      while (this.rooms.has(code)) code = randomRoomCode()
+    this.pruneRooms()
+
+    let room = this.rooms.get(requestedCode)
+
+    if (create) {
+      if (room) {
+        this.send(ws, { type: 'error', message: '房間代碼已被使用' })
+        return
+      }
       room = {
-        code,
+        code: requestedCode,
         phase: 'lobby',
         players: [],
         winnerId: null,
         log: [makeLog('房間已建立，等待對手加入…')],
         updatedAt: Date.now(),
       }
-      this.rooms.set(code, room)
+      this.rooms.set(requestedCode, room)
+    } else if (!room) {
+      this.send(ws, { type: 'error', message: '找不到房間代碼' })
+      return
     }
 
     if (room.phase !== 'lobby') {

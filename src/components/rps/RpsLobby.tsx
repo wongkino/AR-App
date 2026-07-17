@@ -69,23 +69,27 @@ export function RpsLobby({
               maxLength={16}
             />
           </label>
+          <label className="rps-field">
+            <span>房間代碼（自訂四字）</span>
+            <input
+              value={roomCodeInput}
+              onChange={(e) =>
+                onRoomCodeInputChange(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4))
+              }
+              placeholder="例如 LOVE"
+              maxLength={4}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
           <div className="rps-actions">
             <button type="button" className="primary" disabled={!connected} onClick={onCreateRoom}>
               建立房間
             </button>
+            <button type="button" className="secondary" disabled={!connected} onClick={onJoinRoom}>
+              加入房間
+            </button>
           </div>
-          <label className="rps-field">
-            <span>房間代碼</span>
-            <input
-              value={roomCodeInput}
-              onChange={(e) => onRoomCodeInputChange(e.target.value.toUpperCase())}
-              placeholder="例如 AB12"
-              maxLength={4}
-            />
-          </label>
-          <button type="button" className="secondary" disabled={!connected} onClick={onJoinRoom}>
-            加入房間
-          </button>
         </section>
       )}
 
