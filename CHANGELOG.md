@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.1] - 2026-07-17
+
+- fix: avoid freezing camera when unlocking audio on iOS (7759c2f)
+
 ## [v0.5.0] - 2026-07-17
 
 - feat: local trial gestures and reliable iOS speech (cb85d9e)
