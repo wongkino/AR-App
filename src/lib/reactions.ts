@@ -1,6 +1,7 @@
 import type { Reaction } from '../types'
 
 let currentAudio: HTMLAudioElement | null = null
+let settleCurrentPlay: (() => void) | null = null
 let voicesReady: Promise<void> | null = null
 let audioUnlocked = false
 let unlockAudioContext: AudioContext | null = null
@@ -24,15 +25,30 @@ function resumePreviewSoon(): void {
   window.setTimeout(() => previewResumer?.(), 400)
 }
 
+function finishCurrentPlay(): void {
+  const settle = settleCurrentPlay
+  settleCurrentPlay = null
+  if (currentAudio) {
+    currentAudio.onended = null
+    currentAudio.onerror = null
+    currentAudio.onplaying = null
+    currentAudio.onloadedmetadata = null
+    try {
+      currentAudio.pause()
+      currentAudio.currentTime = 0
+    } catch {
+      // ignore
+    }
+    currentAudio = null
+  }
+  settle?.()
+}
+
 export function stopReactions(): void {
   if (typeof speechSynthesis !== 'undefined') {
     speechSynthesis.cancel()
   }
-  if (currentAudio) {
-    currentAudio.pause()
-    currentAudio.currentTime = 0
-    currentAudio = null
-  }
+  finishCurrentPlay()
 }
 
 function isLikelyIOS(): boolean {
@@ -87,7 +103,6 @@ export async function unlockAudio(): Promise<void> {
     // ignore
   }
 
-  // Warm Web Speech only on desktop; iOS camera + speechSynthesis conflict
   if (!isLikelyIOS() && typeof speechSynthesis !== 'undefined') {
     try {
       const warm = new SpeechSynthesisUtterance(' ')
@@ -262,35 +277,67 @@ async function speakViaSynthesis(text: string): Promise<void> {
         reject(new Error('speech-not-started'))
       }
     }, 450)
+
+    window.setTimeout(finish, 12_000)
   })
 }
 
 function playUrl(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    finishCurrentPlay()
+
     const audio = new Audio(url)
-    // Keep camera session preferred: don't let media take exclusive focus longer than needed
     audio.setAttribute('playsinline', 'true')
     currentAudio = audio
 
-    // Kick camera resume as soon as playback starts (iOS pauses video here)
-    audio.onplaying = () => {
+    let settled = false
+    let safetyTimer = 0
+    let durationTimer = 0
+
+    const settle = (err?: Error) => {
+      if (settled) return
+      settled = true
+      settleCurrentPlay = null
+      window.clearTimeout(safetyTimer)
+      window.clearTimeout(durationTimer)
+      if (currentAudio === audio) {
+        currentAudio = null
+      }
       resumePreviewSoon()
+      if (err) reject(err)
+      else resolve()
     }
 
-    audio.onended = () => {
-      currentAudio = null
+    settleCurrentPlay = () => settle()
+
+    audio.onplaying = () => {
       resumePreviewSoon()
-      resolve()
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        window.clearTimeout(durationTimer)
+        durationTimer = window.setTimeout(
+          () => settle(),
+          Math.ceil(audio.duration * 1000) + 350,
+        )
+      }
     }
-    audio.onerror = () => {
-      currentAudio = null
-      resumePreviewSoon()
-      reject(new Error('無法播放音訊，請檢查網址或格式'))
+
+    audio.onloadedmetadata = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        window.clearTimeout(durationTimer)
+        durationTimer = window.setTimeout(
+          () => settle(),
+          Math.ceil(audio.duration * 1000) + 350,
+        )
+      }
     }
+
+    audio.onended = () => settle()
+    audio.onerror = () => settle(new Error('無法播放音訊，請檢查網址或格式'))
+
+    safetyTimer = window.setTimeout(() => settle(), 12_000)
+
     void audio.play().catch((err: unknown) => {
-      currentAudio = null
-      resumePreviewSoon()
-      reject(err instanceof Error ? err : new Error('播放被瀏覽器阻擋，請先點一下畫面'))
+      settle(err instanceof Error ? err : new Error('播放被瀏覽器阻擋，請先點一下畫面'))
     })
   })
 }

@@ -2,12 +2,12 @@ import { dtwDistance, MATCH_THRESHOLD, similarityFromDistance } from '../lib/dtw
 import type { HandFrame, MatchResult, SavedGesture } from '../types'
 
 const WINDOW_MS = 1800
+/** Minimum gap between successful triggers (any gesture). */
 const COOLDOWN_MS = 2200
 
 export class GestureMatcher {
   private buffer: { t: number; frame: HandFrame }[] = []
   private lastMatchAt = 0
-  private lastMatchedId: string | null = null
 
   push(frame: HandFrame): void {
     const now = performance.now()
@@ -21,7 +21,6 @@ export class GestureMatcher {
   clear(): void {
     this.buffer = []
     this.lastMatchAt = 0
-    this.lastMatchedId = null
   }
 
   tryMatch(gestures: SavedGesture[]): MatchResult | null {
@@ -45,13 +44,7 @@ export class GestureMatcher {
 
     if (!best) return null
 
-    // Avoid immediate re-fire of same gesture unless score is clearly strong
-    if (best.gestureId === this.lastMatchedId && best.score < 0.72) {
-      return null
-    }
-
     this.lastMatchAt = now
-    this.lastMatchedId = best.gestureId
     this.buffer = []
     return best
   }
