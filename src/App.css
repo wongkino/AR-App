@@ -155,6 +155,27 @@ textarea {
   color: #062a28;
 }
 
+.audio-unlock {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 999px;
+  min-height: 48px;
+  padding: 0.75rem 1.25rem;
+  background: #f4a261;
+  color: #1a1208;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.75; transform: scale(0.97); }

@@ -8,7 +8,7 @@ import {
   verifyAdminPassword,
 } from './lib/api'
 import { GestureMatcher } from './lib/matcher'
-import { runReaction, stopReactions } from './lib/reactions'
+import { isAudioUnlocked, runReaction, stopReactions, unlockAudio } from './lib/reactions'
 import {
   createId,
   loadAdminPassword,
@@ -39,6 +39,7 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState<DbStatus>('loading')
   const [canEdit, setCanEdit] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
+  const [audioReady, setAudioReady] = useState(() => isAudioUnlocked())
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
@@ -171,6 +172,34 @@ export default function App() {
     setCameraOn(true)
   }, [cameraOn, startCamera])
 
+  /** iPhone/iPad 必須由使用者點擊才能解鎖語音 */
+  const enableAudio = useCallback(async () => {
+    await unlockAudio()
+    setAudioReady(true)
+  }, [])
+
+  const onStartListen = useCallback(async () => {
+    stopReactions()
+    matcherRef.current.clear()
+    setLastTriggered(null)
+    setMode('listening')
+    await ensureCamera()
+  }, [ensureCamera])
+
+  const onStartListenWithAudio = useCallback(async () => {
+    try {
+      await enableAudio()
+    } catch {
+      // still start camera/listen; banner will ask again
+    }
+    await onStartListen()
+    if (isAudioUnlocked()) {
+      flash('監聽中，語音已啟用')
+    } else {
+      flash('監聽中。請再點畫面「啟用語音」')
+    }
+  }, [enableAudio, onStartListen, flash])
+
   const onUnlock = useCallback(async () => {
     const password = passwordInput.trim()
     if (!password) {
@@ -215,14 +244,6 @@ export default function App() {
     setMode('recording')
     await ensureCamera()
     flash('開始錄製，請對鏡頭做完一整段手勢')
-  }, [ensureCamera, flash])
-
-  const onStartListen = useCallback(async () => {
-    stopReactions()
-    matcherRef.current.clear()
-    setLastTriggered(null)
-    setMode('listening')
-    await ensureCamera()
   }, [ensureCamera, flash])
 
   const onStopListen = useCallback(() => {
@@ -314,11 +335,19 @@ export default function App() {
 
   const onTest = useCallback(
     (g: SavedGesture) => {
-      void runReaction(g.reaction).catch((err: unknown) => {
-        flash(err instanceof Error ? err.message : '試播失敗')
-      })
+      void (async () => {
+        try {
+          if (!isAudioUnlocked()) {
+            await enableAudio()
+            setAudioReady(true)
+          }
+          await runReaction(g.reaction)
+        } catch (err: unknown) {
+          flash(err instanceof Error ? err.message : '試播失敗')
+        }
+      })()
     },
-    [flash],
+    [enableAudio, flash],
   )
 
   useEffect(() => {
@@ -336,14 +365,14 @@ export default function App() {
           {!cameraOn && (
             <div className="camera-gate">
               <h2>{ready ? '正在開啟相機…' : '載入模型中…'}</h2>
-              <p>開頁後會自動開始監聽。若瀏覽器擋下權限，請手動允許相機。</p>
+              <p>開頁後會自動開始監聽。iPhone / iPad 請點下方按鈕以同時啟用語音。</p>
               <button
                 type="button"
                 className="primary"
                 disabled={!ready}
-                onClick={() => void onStartListen()}
+                onClick={() => void onStartListenWithAudio()}
               >
-                {ready ? '允許相機並監聽' : '請稍候…'}
+                {ready ? '允許相機並啟用語音' : '請稍候…'}
               </button>
             </div>
           )}
@@ -351,6 +380,22 @@ export default function App() {
           <canvas ref={canvasRef} className="overlay" />
           {mode === 'recording' && <div className="rec-badge">REC</div>}
           {mode === 'listening' && <div className="listen-badge">LISTEN</div>}
+          {cameraOn && !audioReady && (
+            <button
+              type="button"
+              className="audio-unlock"
+              onClick={() =>
+                void enableAudio()
+                  .then(() => {
+                    setAudioReady(true)
+                    flash('語音已啟用，可再做一次手勢')
+                  })
+                  .catch(() => flash('無法啟用語音，請確認裝置未靜音'))
+              }
+            >
+              點此啟用語音
+            </button>
+          )}
         </div>
         {(error || (!ready && !error)) && (
           <p className="stage-note">
@@ -378,7 +423,7 @@ export default function App() {
         onDraftReactionChange={setDraftReaction}
         onStartRecord={() => void onStartRecord()}
         onStopRecord={onStopRecord}
-        onStartListen={() => void onStartListen()}
+        onStartListen={() => void onStartListenWithAudio()}
         onStopListen={onStopListen}
         canSave={!!pendingFrames && pendingFrames.length >= 10}
         onSave={onSave}
