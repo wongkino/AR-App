@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.1.0] - 2026-07-17
+
+- feat: merge web and api into a single app service (8f8c765)
+- fix: sync package-lock versions on every release bump [skip version] (514847a)
+
 本專案所有重要變更會記錄在此檔。版本遵循 [Semantic Versioning](https://semver.org/)。
 
 推送到 `main` 時，GitHub Actions 會自動升版並更新本檔；commit 訊息含 `[skip version]` 則略過升版。
