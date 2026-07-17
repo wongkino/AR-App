@@ -98,7 +98,10 @@ export default function FightApp() {
   useEffect(() => {
     const socket = socketRef.current
     socket.connect({
-      onOpen: () => setConnected(true),
+      onOpen: () => {
+        setConnected(true)
+        setError(null)
+      },
       onJoined: (nextRoom, id) => {
         setRoom(nextRoom)
         setPlayerId(id)
@@ -123,7 +126,7 @@ export default function FightApp() {
     })
 
     return () => {
-      socket.leave()
+      socket.disconnect()
     }
   }, [])
 
