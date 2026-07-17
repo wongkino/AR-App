@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.3] - 2026-07-17
+
+- fix: play gesture TTS via unlocked AudioContext/player (88c79df)
+
 ## [v0.6.2] - 2026-07-17
 
 - fix: keep camera visible while recording on mobile (713f590)
