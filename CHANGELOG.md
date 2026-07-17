@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.1] - 2026-07-17
+
+- fix: improve reaction buttons for iPad Safari (8133754)
+
 ## [v0.4.0] - 2026-07-17
 
 - feat: auto-start listening when the page opens (ec69071)
