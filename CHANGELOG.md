@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.2] - 2026-07-17
+
+- style: make camera viewport a square frame (92fdbc3)
+
 ## [v0.4.1] - 2026-07-17
 
 - fix: improve reaction buttons for iPad Safari (8133754)
