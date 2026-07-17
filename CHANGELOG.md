@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.2] - 2026-07-17
+
+- fix: keep camera visible while recording on mobile (713f590)
+
 ## [v0.6.1] - 2026-07-17
 
 - fix: harden TTS path that caused frequent playback errors (7985371)
