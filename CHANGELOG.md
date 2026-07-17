@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.1] - 2026-07-17
+
+- fix: harden TTS path that caused frequent playback errors (7985371)
+
 ## [v0.6.0] - 2026-07-17
 
 - feat: auto-enable sound with camera start (6b1e290)
