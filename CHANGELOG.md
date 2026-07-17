@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.5.0] - 2026-07-17
+
+- feat: local trial gestures and reliable iOS speech (cb85d9e)
+
 ## [v0.4.4] - 2026-07-17
 
 - fix: unlock Web Speech on iOS/iPad with explicit user tap (460a0ab)
