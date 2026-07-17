@@ -1,82 +1,98 @@
 # Gesture Lab
 
-用手勢學習與觸發反應的 Web App：錄下手勢後，再次做出相同動作即可朗讀文字或播放音訊。
+用手勢學習與觸發反應的 Web App：錄下手勢，再次做出相同動作即可朗讀廣東話或播放音訊。支援 Postgres 同步碼跨裝置。
+
+**目前版本：`v0.0.1`**（見 [`VERSION`](./VERSION)）
+
+| 文件 | 說明 |
+|------|------|
+| [使用者指南](./docs/USER.md) | 安裝、錄製、同步、FAQ |
+| [架構說明](./docs/ARCHITECTURE.md) | 系統設計、API、部署 |
+| [Agent 指南](./docs/AGENT.md) | 給 AI／自動化代理的開發規範 |
+| [Changelog](./CHANGELOG.md) | 版本更新紀錄 |
 
 ## 功能
 
-- MediaPipe Hand Landmarker 即時手部追蹤（手機 / 筆電瀏覽器）
-- 錄製手勢時間序列並以 DTW 比對
-- 觸發反應：Web Speech API 朗讀（廣東話）、播放遠端音訊 URL
-- **Postgres 雲端同步**：用同步碼跨裝置共用手勢
+- MediaPipe 雙手即時追蹤（手機／筆電）
+- 手勢錄製 + DTW 比對
+- 廣東話朗讀、遠端音訊播放
+- 已儲存手勢可改反應
+- 同步碼 → PostgreSQL 雲端保存
+- Docker 一鍵部署；GitHub Actions 自動升版並推 GHCR 映像
 
-## Docker（建議）
-
-一次啟動前端 + API + Postgres：
+## 快速開始（Docker）
 
 ```bash
 docker compose up --build -d
 ```
 
-開啟 http://localhost:8080/
-
-1. 在「雲端同步」按 **建立新同步碼**
-2. 把同步碼記下來，其他裝置輸入同一組碼即可
-3. 之後儲存／修改／刪除手勢會自動寫入資料庫
+開啟 http://localhost:8080/  
+詳細步驟見 [docs/USER.md](./docs/USER.md)。
 
 ```bash
 docker compose down
 ```
 
-### 使用 GitHub Actions 打包的映像
-
-`main` 推送後會自動建置並推到 GHCR：
-
-- `ghcr.io/wongkino/ar-app-web`
-- `ghcr.io/wongkino/ar-app-api`
-
-直接拉映像跑（不必本機 build）：
+### 拉取 CI 建置的映像
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-若套件是 private，先登入：
-
-```bash
-echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-```
-
-打 tag（例如 `v1.0.0`）也會產生對應版本標籤。
+- `ghcr.io/wongkino/ar-app-web:<version>`
+- `ghcr.io/wongkino/ar-app-api:<version>`
 
 ## 本機開發
 
-需要先有 Postgres（或用 compose 只開資料庫）：
-
 ```bash
 docker compose up -d db
-```
 
-```bash
-# API
-cd server && npm install && DATABASE_URL=postgres://gesture:gesture@localhost:5432/gesturelab npm run dev
+# 終端 1：API
+cd server && npm install
+DATABASE_URL=postgres://gesture:gesture@localhost:5432/gesturelab npm run dev
 
-# 前端（另開終端）
+# 終端 2：前端
 npm install && npm run dev
 ```
 
-> 相機需要安全來源（`localhost` 或 HTTPS）。
+## 版本怎麼自動更新？
 
-## 使用流程
+1. 開發者推送到 `main`
+2. `release.yml` 依 Conventional Commits 自動 bump（預設 patch）
+3. 更新 `VERSION`、`package.json`、`server/package.json`、`CHANGELOG.md`
+4. 打上 `vX.Y.Z` tag 並推送
+5. `docker.yml` 建置並推送對應版本映像
 
-1. （建議）建立或加入同步碼
+手動指定升版種類：GitHub → Actions → Release → Run workflow → 選 patch／minor／major。
+
+Commit 含 `[skip version]` 可略過升版（例如純文件修正）。
+
+本機預覽升版：
+
+```bash
+node scripts/bump-version.mjs patch
+```
+
+## 使用流程（摘要）
+
+1. **建立／加入同步碼**（建議）
 2. 開啟相機
-3. 填寫手勢名稱與反應 → **開始錄製** → **停止並預覽** → **儲存手勢**
-4. **開始監聽**，重複該手勢觸發反應
+3. 錄製 → 停止 → 儲存手勢（設定朗讀或音訊）
+4. 開始監聽，重複手勢觸發反應
 
-## 技術
+完整說明：[docs/USER.md](./docs/USER.md)
 
-- Vite + React + TypeScript
-- `@mediapipe/tasks-vision` Hand Landmarker
-- Hono API + PostgreSQL
-- GitHub Actions → GHCR Docker images
+## 技術摘要
+
+| 層 | 技術 |
+|----|------|
+| 前端 | Vite、React 19、TypeScript、MediaPipe Tasks Vision |
+| 後端 | Hono、Node.js、PostgreSQL |
+| 部署 | Docker Compose、nginx、GHCR、GitHub Actions |
+
+架構細節：[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+
+## License
+
+Private / 依倉庫設定。

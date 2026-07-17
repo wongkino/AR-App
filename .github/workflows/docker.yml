@@ -2,7 +2,6 @@ name: Build Docker images
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -35,6 +34,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read VERSION
+        id: version
+        run: |
+          if [ -f VERSION ]; then
+            V=$(tr -d '[:space:]' < VERSION)
+          else
+            V=${GITHUB_REF_NAME#v}
+          fi
+          echo "value=$V" >> "$GITHUB_OUTPUT"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -52,11 +61,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=
-            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.version.outputs.value }},enable=${{ github.ref_type == 'tag' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+            type=ref,event=pr
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -69,3 +79,5 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.value }}
