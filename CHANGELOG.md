@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.7] - 2026-07-17
+
+- Add custom 4-char room codes and RPS countdown/win-lose SFX. (4bc538f)
+
 ## [v0.6.6] - 2026-07-17
 
 - Merge pull request #3 from wongkino/cursor/rps-game-c018 (8c95ccb)
