@@ -1,12 +1,12 @@
 # Gesture Lab
 
-用手勢學習與觸發反應的 Web App：錄下手勢，再次做出相同動作即可朗讀廣東話或播放音訊。支援 Postgres 同步碼跨裝置。
+用手勢學習與觸發反應的 Web App：錄下手勢，再次做出相同動作即可朗讀廣東話或播放音訊。手勢直接存於 PostgreSQL，所有裝置共用。
 
 **目前版本：`v0.0.1`**（見 [`VERSION`](./VERSION)）
 
 | 文件 | 說明 |
 |------|------|
-| [使用者指南](./docs/USER.md) | 安裝、錄製、同步、FAQ |
+| [使用者指南](./docs/USER.md) | 安裝、錄製、監聽、FAQ |
 | [架構說明](./docs/ARCHITECTURE.md) | 系統設計、API、部署 |
 | [Agent 指南](./docs/AGENT.md) | 給 AI／自動化代理的開發規範 |
 | [Changelog](./CHANGELOG.md) | 版本更新紀錄 |
@@ -17,7 +17,7 @@
 - 手勢錄製 + DTW 比對
 - 廣東話朗讀、遠端音訊播放
 - 已儲存手勢可改反應
-- 同步碼 → PostgreSQL 雲端保存
+- 手勢直接存 PostgreSQL（所有裝置共用同一份資料）
 - Docker 一鍵部署（`app` + `db`；web／API 合併）；GitHub Actions 推送 `ghcr.io/wongkino/ar-app`
 
 ## 快速開始（Docker）
@@ -28,7 +28,7 @@ docker compose up --build -d
 
 開啟 http://localhost:8080/  
 
-- **一般**：加入同步碼 → 監聽手勢  
+- **一般**：開啟即可監聽（自動載入資料庫手勢）  
 - **管理員**：密碼解鎖後才能錄製／儲存（預設 `gesture-admin`，可用 `ADMIN_PASSWORD` 改）
 
 ```bash
@@ -77,9 +77,9 @@ node scripts/bump-version.mjs patch
 
 ## 使用流程（摘要）
 
-1. **建立／加入同步碼**（建議）
+1. 開啟頁面（自動從資料庫載入手勢）
 2. 開啟相機
-3. 錄製 → 停止 → 儲存手勢（設定朗讀或音訊）
+3. （管理員）錄製 → 停止 → 儲存手勢
 4. 開始監聽，重複手勢觸發反應
 
 完整說明：[docs/USER.md](./docs/USER.md)

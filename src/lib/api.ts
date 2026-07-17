@@ -41,23 +41,13 @@ export async function verifyAdminPassword(password: string): Promise<void> {
   })
 }
 
-export async function createWorkspace(): Promise<{ syncKey: string }> {
-  return request('/api/workspaces', { method: 'POST', admin: true })
-}
-
-export async function verifyWorkspace(syncKey: string): Promise<{ syncKey: string }> {
-  return request(`/api/workspaces/${encodeURIComponent(syncKey)}`)
-}
-
-export async function fetchGestures(syncKey: string): Promise<SavedGesture[]> {
-  const data = await request<{ gestures: SavedGesture[] }>(
-    `/api/workspaces/${encodeURIComponent(syncKey)}/gestures`,
-  )
+export async function fetchGestures(): Promise<SavedGesture[]> {
+  const data = await request<{ gestures: SavedGesture[] }>('/api/gestures')
   return data.gestures
 }
 
-export async function pushGestures(syncKey: string, gestures: SavedGesture[]): Promise<void> {
-  await request(`/api/workspaces/${encodeURIComponent(syncKey)}/gestures`, {
+export async function pushGestures(gestures: SavedGesture[]): Promise<void> {
+  await request('/api/gestures', {
     method: 'PUT',
     admin: true,
     body: JSON.stringify({ gestures }),

@@ -67,13 +67,11 @@ idle ──開始錄製──► recording ──停止──► idle（pendingF
   └──開始監聽──► listening ──匹配成功──► runReaction()
 ```
 
-### 3.3 同步策略
+### 3.3 資料庫策略
 
-1. 本機永遠寫入 `localStorage`（離線可用）。
-2. 若有 `syncKey`：手勢變更後 debounce ~600ms，`PUT` 全量覆蓋該 workspace 的 gestures。
-3. 進入同步／重新下載：`GET` 覆蓋本機列表。
-
-> 目前採 **last-write-wins 全量同步**，適合個人／小規模共用，非即時 CRDT。
+1. 開啟頁面即 `GET /api/gestures` 載入。
+2. 管理員解鎖後，手勢變更 debounce 寫入 `PUT /api/gestures`。
+3. `localStorage` 僅作離線快取。
 
 ## 4. 後端架構
 
@@ -82,26 +80,16 @@ idle ──開始錄製──► recording ──停止──► idle（pendingF
 | Method | Path | 說明 |
 |--------|------|------|
 | GET | `/api/health` | 健康檢查 |
-| POST | `/api/workspaces` | 建立 workspace，回傳 syncKey |
-| GET | `/api/workspaces/:syncKey` | 驗證同步碼 |
-| GET | `/api/workspaces/:syncKey/gestures` | 列出手勢 |
-| PUT | `/api/workspaces/:syncKey/gestures` | 全量覆寫手勢 |
-| DELETE | `/api/workspaces/:syncKey/gestures/:id` | 刪除單一手勢 |
-
-同步碼格式：`XXX-XXX-XXX`（排除易混淆字元）。
+| GET | `/api/gestures` | 列出全部手勢（公開） |
+| PUT | `/api/gestures` | 全量覆寫手勢（需管理密碼） |
+| DELETE | `/api/gestures/:id` | 刪除單一手勢（需管理密碼） |
+| POST | `/api/auth/verify` | 驗證管理密碼 |
 
 ### 4.2 資料模型（PostgreSQL）
 
 ```sql
-workspaces (
-  id UUID PK,
-  sync_key TEXT UNIQUE,
-  created_at TIMESTAMPTZ
-)
-
 gestures (
   id TEXT PK,
-  workspace_id UUID → workspaces,
   name TEXT,
   frames JSONB,      -- HandFrame[]
   reaction JSONB,    -- { kind: 'speak'|'play', ... }
@@ -136,8 +124,8 @@ push main
 
 ## 6. 安全與隱私邊界
 
-- 相機畫面**不上傳**；僅手勢關鍵點序列（正規化後）可能存 DB。
-- 同步碼等同分享密鑰：知道碼即可讀寫該 workspace（無個別使用者帳號）。
+- 相機畫面**不上傳**；僅手勢關鍵點序列（正規化後）存 DB。
+- 讀取手勢公開；寫入需 `ADMIN_PASSWORD`。
 - 預設 compose 資料庫帳密為開發用，正式環境請改密與限制網路。
 - 相機需安全來源（`localhost` 或 HTTPS）。
 

@@ -12,6 +12,8 @@ type Props = {
   onPasswordInputChange: (v: string) => void
   onUnlock: () => void
   onLock: () => void
+  dbStatus: 'loading' | 'ok' | 'error' | 'saving'
+  onReloadDb: () => void
   draftName: string
   draftReaction: Reaction
   onDraftNameChange: (v: string) => void
@@ -26,14 +28,6 @@ type Props = {
   onDelete: (id: string) => void
   onTest: (g: SavedGesture) => void
   onUpdate: (id: string, patch: { name: string; reaction: Reaction }) => void
-  syncKey: string | null
-  syncStatus: 'idle' | 'syncing' | 'ok' | 'error' | 'offline'
-  syncInput: string
-  onSyncInputChange: (v: string) => void
-  onCreateSync: () => void
-  onJoinSync: () => void
-  onLeaveSync: () => void
-  onPullSync: () => void
 }
 
 function reactionSummary(reaction: Reaction): string {
@@ -125,6 +119,8 @@ export function ControlPanel({
   onPasswordInputChange,
   onUnlock,
   onLock,
+  dbStatus,
+  onReloadDb,
   draftName,
   draftReaction,
   onDraftNameChange,
@@ -139,14 +135,6 @@ export function ControlPanel({
   onDelete,
   onTest,
   onUpdate,
-  syncKey,
-  syncStatus,
-  syncInput,
-  onSyncInputChange,
-  onCreateSync,
-  onJoinSync,
-  onLeaveSync,
-  onPullSync,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
@@ -182,13 +170,22 @@ export function ControlPanel({
     setEditingId(null)
   }
 
+  const dbLabel =
+    dbStatus === 'loading'
+      ? '載入資料庫…'
+      : dbStatus === 'saving'
+        ? '寫入資料庫…'
+        : dbStatus === 'ok'
+          ? '已連線資料庫'
+          : '資料庫連線失敗'
+
   return (
     <aside className="panel">
       <header className="panel-brand">
         <p className="eyebrow">Gesture Lab</p>
         <h1>用手勢觸發反應</h1>
         <p className="lede">
-          一般模式只能監聽。輸入管理密碼後才能錄製與儲存手勢。
+          手勢直接存在資料庫。一般模式只能監聽；輸入管理密碼後才能錄製與儲存。
         </p>
       </header>
 
@@ -210,12 +207,27 @@ export function ControlPanel({
         <span className={`pill ${canEdit ? 'on' : ''}`}>
           {canEdit ? '編輯已解鎖' : '僅監聽'}
         </span>
+        <span
+          className={`pill ${dbStatus === 'ok' ? 'on' : ''} ${dbStatus === 'error' ? 'mode-recording' : ''}`}
+        >
+          {dbLabel}
+        </span>
       </div>
 
       {statusMessage && <p className="flash">{statusMessage}</p>}
       {lastTriggered && mode === 'listening' && (
         <p className="flash success">觸發：{lastTriggered}</p>
       )}
+
+      <section className="block">
+        <h2>資料庫</h2>
+        <p className="hint">所有裝置共用同一份手勢資料，開啟頁面會自動從資料庫載入。</p>
+        <div className="actions">
+          <button type="button" className="secondary" onClick={onReloadDb}>
+            重新載入
+          </button>
+        </div>
+      </section>
 
       <section className="block">
         <h2>管理密碼</h2>
@@ -230,7 +242,7 @@ export function ControlPanel({
           </>
         ) : (
           <>
-            <p className="hint">輸入密碼後才能儲存手勢。預設密碼見部署設定（ADMIN_PASSWORD）。</p>
+            <p className="hint">輸入密碼後才能儲存手勢。預設密碼可用環境變數 ADMIN_PASSWORD 設定。</p>
             <label className="field">
               <span>密碼</span>
               <input
@@ -247,65 +259,6 @@ export function ControlPanel({
               <button type="button" className="primary" onClick={onUnlock}>
                 解鎖編輯
               </button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="block">
-        <h2>雲端同步</h2>
-        {syncKey ? (
-          <>
-            <p className="hint">
-              同步碼：<strong className="sync-code">{syncKey}</strong>
-              <br />
-              在其他裝置輸入同一組碼即可監聽同一組手勢。
-            </p>
-            <span
-              className={`pill ${syncStatus === 'ok' ? 'on' : ''} ${syncStatus === 'error' ? 'mode-recording' : ''}`}
-            >
-              {syncStatus === 'syncing'
-                ? '同步中…'
-                : syncStatus === 'ok'
-                  ? '已連線資料庫'
-                  : syncStatus === 'error'
-                    ? '同步失敗'
-                    : syncStatus === 'offline'
-                      ? '離線（僅本機）'
-                      : '待命'}
-            </span>
-            <div className="actions">
-              <button type="button" className="secondary" onClick={onPullSync}>
-                重新下載
-              </button>
-              {canEdit && (
-                <button type="button" className="danger" onClick={onLeaveSync}>
-                  解除同步
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="hint">輸入同步碼即可下載並監聽手勢。建立新同步碼需管理密碼。</p>
-            <label className="field">
-              <span>同步碼</span>
-              <input
-                value={syncInput}
-                onChange={(e) => onSyncInputChange(e.target.value.toUpperCase())}
-                placeholder="例如 ABC-123-XYZ"
-                autoCapitalize="characters"
-              />
-            </label>
-            <div className="actions">
-              <button type="button" className="primary" onClick={onJoinSync}>
-                加入同步
-              </button>
-              {canEdit && (
-                <button type="button" className="secondary" onClick={onCreateSync}>
-                  建立新同步碼
-                </button>
-              )}
             </div>
           </>
         )}
@@ -377,7 +330,9 @@ export function ControlPanel({
         <h2>已儲存（{gestures.length}）</h2>
         {gestures.length === 0 ? (
           <p className="hint">
-            {canEdit ? '還沒有手勢。先錄一段並儲存。' : '尚無手勢。請先加入同步碼下載，或請管理員錄製。'}
+            {canEdit
+              ? '還沒有手勢。先錄一段並儲存。'
+              : '資料庫尚無手勢。請管理員錄製後，再按「重新載入」。'}
           </p>
         ) : (
           <ul className="gesture-list">

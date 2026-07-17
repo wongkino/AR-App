@@ -2,12 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
 import {
-  createWorkspace,
   fetchGestures,
   pushGestures,
   setAdminPassword,
   verifyAdminPassword,
-  verifyWorkspace,
 } from './lib/api'
 import { GestureMatcher } from './lib/matcher'
 import { runReaction, stopReactions } from './lib/reactions'
@@ -15,10 +13,8 @@ import {
   createId,
   loadAdminPassword,
   loadGestures,
-  loadSyncKey,
   saveAdminPassword,
   saveGesturesLocal,
-  saveSyncKey,
 } from './lib/storage'
 import type { AppMode, HandFrame, Reaction, SavedGesture } from './types'
 import './App.css'
@@ -28,7 +24,7 @@ const DEFAULT_REACTION: Reaction = {
   text: '哈囉，手勢認到喇',
 }
 
-type SyncStatus = 'idle' | 'syncing' | 'ok' | 'error' | 'offline'
+type DbStatus = 'loading' | 'ok' | 'error' | 'saving'
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('idle')
@@ -40,15 +36,12 @@ export default function App() {
   const [lastTriggered, setLastTriggered] = useState<string | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
-  const [syncKey, setSyncKey] = useState<string | null>(() => loadSyncKey())
-  const [syncInput, setSyncInput] = useState('')
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  const [dbStatus, setDbStatus] = useState<DbStatus>('loading')
   const [canEdit, setCanEdit] = useState(false)
   const [passwordInput, setPasswordInput] = useState('')
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
-  const syncKeyRef = useRef(syncKey)
   const canEditRef = useRef(canEdit)
   const recordBuf = useRef<HandFrame[]>([])
   const matcherRef = useRef(new GestureMatcher())
@@ -66,15 +59,31 @@ export default function App() {
   }, [gestures])
 
   useEffect(() => {
-    syncKeyRef.current = syncKey
-    saveSyncKey(syncKey)
-  }, [syncKey])
-
-  useEffect(() => {
     canEditRef.current = canEdit
   }, [canEdit])
 
-  // Restore admin session within the same browser tab
+  const flash = useCallback((msg: string) => {
+    setStatusMessage(msg)
+    window.setTimeout(() => setStatusMessage(null), 2800)
+  }, [])
+
+  const reloadFromDb = useCallback(async () => {
+    setDbStatus('loading')
+    try {
+      const remote = await fetchGestures()
+      skipNextPush.current = true
+      setGestures(remote)
+      setDbStatus('ok')
+    } catch (err) {
+      setDbStatus('error')
+      flash(err instanceof Error ? err.message : '無法從資料庫載入')
+    }
+  }, [flash])
+
+  useEffect(() => {
+    void reloadFromDb()
+  }, [reloadFromDb])
+
   useEffect(() => {
     const saved = loadAdminPassword()
     if (!saved) return
@@ -90,69 +99,29 @@ export default function App() {
     })()
   }, [])
 
-  const flash = useCallback((msg: string) => {
-    setStatusMessage(msg)
-    window.setTimeout(() => setStatusMessage(null), 2800)
-  }, [])
-
-  const pushToCloud = useCallback(
-    async (nextGestures: SavedGesture[], key: string) => {
-      if (!canEditRef.current) return
-      setSyncStatus('syncing')
-      try {
-        await pushGestures(key, nextGestures)
-        setSyncStatus('ok')
-      } catch {
-        setSyncStatus('error')
-      }
-    },
-    [],
-  )
-
-  // Debounced cloud sync — editors only
+  // Admin edits → write to DB
   useEffect(() => {
-    if (!syncKey || !canEdit) return
+    if (!canEdit) return
     if (skipNextPush.current) {
       skipNextPush.current = false
       return
     }
     if (pushTimer.current) window.clearTimeout(pushTimer.current)
     pushTimer.current = window.setTimeout(() => {
-      void pushToCloud(gestures, syncKey)
+      void (async () => {
+        setDbStatus('saving')
+        try {
+          await pushGestures(gestures)
+          setDbStatus('ok')
+        } catch {
+          setDbStatus('error')
+        }
+      })()
     }, 600)
     return () => {
       if (pushTimer.current) window.clearTimeout(pushTimer.current)
     }
-  }, [gestures, syncKey, canEdit, pushToCloud])
-
-  useEffect(() => {
-    if (!syncKey) {
-      setSyncStatus('offline')
-      return
-    }
-
-    let cancelled = false
-    ;(async () => {
-      setSyncStatus('syncing')
-      try {
-        await verifyWorkspace(syncKey)
-        const remote = await fetchGestures(syncKey)
-        if (cancelled) return
-        skipNextPush.current = true
-        setGestures(remote)
-        setSyncStatus('ok')
-      } catch {
-        if (!cancelled) {
-          setSyncStatus('error')
-          flash('無法連接資料庫，暫用本機資料')
-        }
-      }
-    })()
-
-    return () => {
-      cancelled = true
-    }
-  }, [syncKey, flash])
+  }, [gestures, canEdit])
 
   const onFrame = useCallback((frame: HandFrame | null) => {
     if (!frame) return
@@ -295,7 +264,7 @@ export default function App() {
     setPendingFrames(null)
     setDraftName('')
     setDraftReaction(DEFAULT_REACTION)
-    flash(syncKeyRef.current ? `已儲存「${name}」並同步到資料庫` : `已儲存「${name}」（僅本機，請設定同步碼）`)
+    flash(`已儲存「${name}」到資料庫`)
   }, [pendingFrames, draftName, draftReaction, gestures.length, flash])
 
   const onStartListen = useCallback(async () => {
@@ -340,67 +309,6 @@ export default function App() {
     [flash],
   )
 
-  const onCreateSync = useCallback(async () => {
-    if (!canEditRef.current) {
-      flash('請先輸入管理密碼')
-      return
-    }
-    setSyncStatus('syncing')
-    try {
-      const { syncKey: key } = await createWorkspace()
-      await pushGestures(key, gesturesRef.current)
-      setSyncKey(key)
-      setSyncStatus('ok')
-      flash(`已建立同步碼 ${key}`)
-    } catch (err) {
-      setSyncStatus('error')
-      flash(err instanceof Error ? err.message : '建立同步失敗')
-    }
-  }, [flash])
-
-  const onJoinSync = useCallback(async () => {
-    const key = syncInput.trim().toUpperCase()
-    if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(key)) {
-      flash('同步碼格式應為 XXX-XXX-XXX')
-      return
-    }
-    setSyncStatus('syncing')
-    try {
-      await verifyWorkspace(key)
-      const remote = await fetchGestures(key)
-      skipNextPush.current = true
-      setGestures(remote)
-      setSyncKey(key)
-      setSyncStatus('ok')
-      flash(`已加入同步 ${key}`)
-    } catch (err) {
-      setSyncStatus('error')
-      flash(err instanceof Error ? err.message : '加入同步失敗')
-    }
-  }, [syncInput, flash])
-
-  const onLeaveSync = useCallback(() => {
-    if (!canEditRef.current) return
-    setSyncKey(null)
-    setSyncStatus('offline')
-    flash('已解除雲端同步（本機資料仍保留）')
-  }, [flash])
-
-  const onPullSync = useCallback(async () => {
-    if (!syncKey) return
-    setSyncStatus('syncing')
-    try {
-      const remote = await fetchGestures(syncKey)
-      skipNextPush.current = true
-      setGestures(remote)
-      setSyncStatus('ok')
-      flash('已從資料庫重新下載')
-    } catch (err) {
-      setSyncStatus('error')
-      flash(err instanceof Error ? err.message : '下載失敗')
-    }
-  }, [syncKey, flash])
-
   useEffect(() => {
     return () => {
       stopCamera()
@@ -416,7 +324,7 @@ export default function App() {
           {!cameraOn && (
             <div className="camera-gate">
               <h2>開啟鏡頭開始</h2>
-              <p>一般可直接監聽手勢；儲存／錄製需管理密碼。</p>
+              <p>手勢直接存於資料庫。一般可監聽；錄製需管理密碼。</p>
               <button
                 type="button"
                 className="primary"
@@ -450,6 +358,8 @@ export default function App() {
         onPasswordInputChange={setPasswordInput}
         onUnlock={() => void onUnlock()}
         onLock={onLock}
+        dbStatus={dbStatus}
+        onReloadDb={() => void reloadFromDb()}
         draftName={draftName}
         draftReaction={draftReaction}
         onDraftNameChange={setDraftName}
@@ -464,14 +374,6 @@ export default function App() {
         onDelete={onDelete}
         onTest={onTest}
         onUpdate={onUpdate}
-        syncKey={syncKey}
-        syncStatus={syncStatus}
-        syncInput={syncInput}
-        onSyncInputChange={setSyncInput}
-        onCreateSync={() => void onCreateSync()}
-        onJoinSync={() => void onJoinSync()}
-        onLeaveSync={onLeaveSync}
-        onPullSync={() => void onPullSync()}
       />
     </div>
   )

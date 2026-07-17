@@ -1,7 +1,6 @@
 import type { SavedGesture } from '../types'
 
 const GESTURES_KEY = 'gesture-lab:gestures'
-const SYNC_KEY = 'gesture-lab:sync-key'
 const ADMIN_SESSION_KEY = 'gesture-lab:admin-password'
 
 export function loadGestures(): SavedGesture[] {
@@ -17,18 +16,6 @@ export function loadGestures(): SavedGesture[] {
 
 export function saveGesturesLocal(gestures: SavedGesture[]): void {
   localStorage.setItem(GESTURES_KEY, JSON.stringify(gestures))
-}
-
-export function loadSyncKey(): string | null {
-  return localStorage.getItem(SYNC_KEY)
-}
-
-export function saveSyncKey(syncKey: string | null): void {
-  if (!syncKey) {
-    localStorage.removeItem(SYNC_KEY)
-    return
-  }
-  localStorage.setItem(SYNC_KEY, syncKey.trim().toUpperCase())
 }
 
 export function createId(): string {
