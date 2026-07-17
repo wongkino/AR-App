@@ -1,0 +1,85 @@
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(11, 28, 31, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.admin-modal {
+  width: min(100%, 380px);
+  padding: 1.25rem;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.admin-modal h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--display);
+  font-size: 1.35rem;
+}
+
+.admin-modal-hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.admin-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.admin-modal-field span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.admin-modal-field input {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.admin-modal-error {
+  margin: 0 0 0.75rem;
+  color: #b42318;
+  font-size: 0.92rem;
+}
+
+.admin-modal-actions {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.admin-modal-actions button {
+  flex: 1;
+  padding: 0.7rem 1rem;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-modal-actions .primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-modal-actions .secondary {
+  background: rgba(18, 33, 38, 0.08);
+  color: var(--ink);
+}
+
+.admin-modal-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

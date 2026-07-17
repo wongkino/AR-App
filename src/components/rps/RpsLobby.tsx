@@ -1,5 +1,5 @@
-import type { PublicRpsRoom, RpsLoadout, RpsMove } from '../../game/rpsTypes'
-import { RPS_HINTS, RPS_LABELS } from '../../game/rpsTypes'
+import type { MatchFormat, PublicRpsRoom, RpsLoadout, RpsMove } from '../../game/rpsTypes'
+import { MATCH_FORMAT_LABELS, RPS_HINTS, RPS_LABELS } from '../../game/rpsTypes'
 import type { SavedGesture } from '../../types'
 
 const MOVES: RpsMove[] = ['rock', 'scissors', 'paper']
@@ -20,6 +20,7 @@ type Props = {
   onJoinRoom: () => void
   onReady: () => void
   onRematch: () => void
+  onFormatChange: (format: MatchFormat) => void
 }
 
 export function RpsLobby({
@@ -38,9 +39,11 @@ export function RpsLobby({
   onJoinRoom,
   onReady,
   onRematch,
+  onFormatChange,
 }: Props) {
   const me = room?.players.find((p) => p.id === playerId) ?? null
   const opponent = room?.players.find((p) => p.id !== playerId) ?? null
+  const isHost = room?.players[0]?.id === playerId
 
   return (
     <div className="rps-panel">
@@ -50,7 +53,7 @@ export function RpsLobby({
           <h1>包剪揼</h1>
         </div>
         <a className="rps-link" href="/">
-          ← 返回 Gesture Lab
+          ← 返回主頁
         </a>
       </header>
 
@@ -99,7 +102,7 @@ export function RpsLobby({
           </section>
 
           <section className="rps-card">
-            <h2>比分（先贏 3 分）</h2>
+            <h2>比分（{room.matchFormat ? MATCH_FORMAT_LABELS[room.matchFormat] : '三盤兩勝'}）</h2>
             <div className="rps-scores">
               <div className={`rps-score-card${me?.id === room.winnerId ? ' winner' : ''}`}>
                 <strong>{me?.name ?? playerName}</strong>
@@ -117,10 +120,34 @@ export function RpsLobby({
 
           {room.phase === 'lobby' && (
             <section className="rps-card">
+              <h2>賽制</h2>
+              {isHost ? (
+                <label className="rps-field">
+                  <span>選擇對戰規則</span>
+                  <select
+                    value={room.matchFormat}
+                    onChange={(e) => onFormatChange(e.target.value as MatchFormat)}
+                    disabled={me?.ready === true || room.players.some((p) => p.ready)}
+                  >
+                    {(Object.keys(MATCH_FORMAT_LABELS) as MatchFormat[]).map((format) => (
+                      <option key={format} value={format}>
+                        {MATCH_FORMAT_LABELS[format]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <p className="rps-muted">{MATCH_FORMAT_LABELS[room.matchFormat]}</p>
+              )}
+            </section>
+          )}
+
+          {room.phase === 'lobby' && (
+            <section className="rps-card">
               <h2>手勢配置</h2>
               <p className="rps-muted">為包（拳）、剪、揼各選一個手勢。建議錄製握拳、剪刀手、張開手掌。</p>
               {gestures.length < 3 ? (
-                <p className="rps-warn">手勢不足 3 個，請先到首頁錄製包、剪、揼手勢。</p>
+                <p className="rps-warn">手勢不足 3 個，請管理員到設定頁錄製包、剪、揼手勢。</p>
               ) : (
                 <div className="rps-loadout">
                   {MOVES.map((move) => (

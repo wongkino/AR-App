@@ -51,7 +51,7 @@ export function FightLobby({
           <h1>手勢格鬥</h1>
         </div>
         <a className="fight-link" href="/">
-          ← 返回 Gesture Lab
+          ← 返回主頁
         </a>
       </header>
 
@@ -120,7 +120,7 @@ export function FightLobby({
               <p className="fight-muted">為每種招式選一個手勢。建議錄製：直拳、踢腿、大招、雙手擋。</p>
               {gestures.length < 4 ? (
                 <p className="fight-warn">
-                  資料庫手勢不足 4 個。請先到首頁以管理員身份錄製手勢，或本機試用錄製。
+                  資料庫手勢不足 4 個。請管理員到設定頁錄製手勢。
                 </p>
               ) : (
                 <div className="fight-loadout">

@@ -22,7 +22,10 @@ export class FightSocket {
 
   connect(handlers: Handlers): void {
     this.handlers = handlers
-    this.ws?.close()
+    const previous = this.ws
+    this.ws = null
+    previous?.close()
+
     const ws = new WebSocket(wsUrl())
     this.ws = ws
 
@@ -56,20 +59,25 @@ export class FightSocket {
     }
 
     ws.onclose = () => {
+      if (this.ws !== ws) return
       handlers.onClose?.()
     }
 
     ws.onerror = () => {
+      if (this.ws !== ws) return
       handlers.onError?.('連線中斷，請檢查網路')
     }
   }
 
-  private send(payload: unknown): void {
+  private send(payload: unknown, opts?: { silent?: boolean }): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.handlers.onError?.('尚未連線到對戰伺服器')
-      return
+      if (!opts?.silent) {
+        this.handlers.onError?.('尚未連線到對戰伺服器')
+      }
+      return false
     }
     this.ws.send(JSON.stringify(payload))
+    return true
   }
 
   join(roomCode: string | undefined, playerName: string): void {
@@ -89,9 +97,8 @@ export class FightSocket {
   }
 
   leave(): void {
-    this.send({ type: 'leave' })
-    this.ws?.close()
-    this.ws = null
+    this.send({ type: 'leave' }, { silent: true })
+    this.disconnect()
   }
 
   disconnect(): void {

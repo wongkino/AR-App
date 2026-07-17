@@ -29,7 +29,7 @@ export function RpsArena({ room, me, opponent, playerId, countdown, flashMove }:
           {room.roundPhase === 'throwing' && <span className="rps-throw-hint">出招！</span>}
           {room.roundPhase === 'reveal' && <span className="rps-reveal-hint">揭曉</span>}
           {room.roundPhase === 'between' && <span className="rps-between-hint">下一局…</span>}
-          <small>第 {room.round} 局</small>
+          <small>第 {room.round} 局 · 先贏 {room.winTarget} 局</small>
         </div>
         <div className="rps-arena-score right">
           <span>{opponent?.name ?? '對手'}</span>

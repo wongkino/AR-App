@@ -92,7 +92,10 @@ export default function RpsApp() {
   useEffect(() => {
     const socket = socketRef.current
     socket.connect({
-      onOpen: () => setConnected(true),
+      onOpen: () => {
+        setConnected(true)
+        setError(null)
+      },
       onJoined: (nextRoom, id) => {
         setRoom(nextRoom)
         setPlayerId(id)
@@ -113,7 +116,7 @@ export default function RpsApp() {
       onClose: () => setConnected(false),
     })
 
-    return () => socket.leave()
+    return () => socket.disconnect()
   }, [])
 
   const onFrame = useCallback(
@@ -251,6 +254,7 @@ export default function RpsApp() {
         onJoinRoom={onJoinRoom}
         onReady={onReady}
         onRematch={() => socketRef.current.rematch()}
+        onFormatChange={(format) => socketRef.current.setFormat(format)}
       />
     </div>
   )
