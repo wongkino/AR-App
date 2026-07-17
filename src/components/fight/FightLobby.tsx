@@ -1,8 +1,6 @@
-import type { MoveLoadout, MoveType, PublicRoomState } from '../../game/types'
-import { MOVE_HINTS, MOVE_LABELS } from '../../game/types'
+import type { MoveLoadout, PublicRoomState } from '../../game/types'
+import { fightLoadoutLabel } from '../../lib/loadoutStorage'
 import type { SavedGesture } from '../../types'
-
-const MOVES: MoveType[] = ['punch', 'kick', 'special', 'block']
 
 type Props = {
   room: PublicRoomState | null
@@ -11,11 +9,11 @@ type Props = {
   roomCodeInput: string
   loadout: MoveLoadout
   gestures: SavedGesture[]
+  loadoutReady: boolean
   connected: boolean
   error: string | null
   onPlayerNameChange: (v: string) => void
   onRoomCodeInputChange: (v: string) => void
-  onLoadoutChange: (move: MoveType, gestureId: string) => void
   onCreateRoom: () => void
   onJoinRoom: () => void
   onReady: () => void
@@ -29,11 +27,11 @@ export function FightLobby({
   roomCodeInput,
   loadout,
   gestures,
+  loadoutReady,
   connected,
   error,
   onPlayerNameChange,
   onRoomCodeInputChange,
-  onLoadoutChange,
   onCreateRoom,
   onJoinRoom,
   onReady,
@@ -120,41 +118,23 @@ export function FightLobby({
 
           {room.phase !== 'fighting' && (
             <section className="fight-card">
-              <h2>招式配置</h2>
-              <p className="fight-muted">為每種招式選一個手勢。建議錄製：直拳、踢腿、大招、雙手擋。</p>
-              {gestures.length < 4 ? (
-                <p className="fight-warn">
-                  資料庫手勢不足 4 個。請管理員到設定頁錄製手勢。
-                </p>
+              <h2>準備</h2>
+              {loadoutReady ? (
+                <p className="fight-muted">已套用設定頁配對：{fightLoadoutLabel(loadout, gestures)}</p>
               ) : (
-                <div className="fight-loadout">
-                  {MOVES.map((move) => (
-                    <label key={move} className="fight-loadout-row">
-                      <span>
-                        <strong>{MOVE_LABELS[move]}</strong>
-                        <small>{MOVE_HINTS[move]}</small>
-                      </span>
-                      <select
-                        value={loadout[move] ?? ''}
-                        onChange={(e) => onLoadoutChange(move, e.target.value)}
-                        disabled={me?.ready === true}
-                      >
-                        <option value="">選擇手勢</option>
-                        {gestures.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
+                <p className="fight-warn">
+                  尚未完成招式配對。請管理員到{' '}
+                  <a className="fight-link" href="/">
+                    設定
+                  </a>{' '}
+                  為拳／踢／必殺／擋各指定一個手勢。
+                </p>
               )}
               {room.phase === 'lobby' && (
                 <button
                   type="button"
                   className="primary"
-                  disabled={me?.ready || gestures.length < 4}
+                  disabled={me?.ready || !loadoutReady}
                   onClick={onReady}
                 >
                   {me?.ready ? '已準備' : '準備開打'}

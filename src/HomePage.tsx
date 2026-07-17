@@ -6,14 +6,14 @@ const GAMES = [
   {
     href: '/fight',
     title: '手勢格鬥',
-    desc: '2 人即時對戰。錄製拳、踢、必殺、擋的手勢，對住鏡頭出招扣 HP。',
+    desc: '2 人即時對戰。用手勢出拳、踢、必殺、擋，對住鏡頭扣 HP。',
     tag: 'Multiplayer',
     emoji: '🥊',
   },
   {
     href: '/rps',
     title: '包剪揼',
-    desc: '2 人包剪揼。配置包、剪、揼手勢，三盤兩勝，倒數後同時出招。',
+    desc: '2 人包剪揼。三盤兩勝，倒數後同時出招。',
     tag: 'Multiplayer',
     emoji: '✊',
   },
@@ -27,7 +27,7 @@ export default function HomePage() {
       <header className="home-header">
         <p className="home-kicker">Gesture Lab</p>
         <h1>選擇遊戲</h1>
-        <p className="home-lede">用手勢玩多人遊戲。管理員可先設定手勢庫，再開局對戰。</p>
+        <p className="home-lede">用手勢玩多人遊戲。管理員請先在設定完成手勢配對，再開局。</p>
       </header>
 
       <div className="home-grid">
@@ -51,7 +51,7 @@ export default function HomePage() {
           </span>
           <span>
             <strong>設定</strong>
-            <small>管理員登入後管理手勢庫</small>
+            <small>管理手勢庫與遊戲配對</small>
           </span>
         </button>
       </footer>

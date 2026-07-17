@@ -1,8 +1,7 @@
-import type { MatchFormat, PublicRpsRoom, RpsLoadout, RpsMove } from '../../game/rpsTypes'
-import { MATCH_FORMAT_LABELS, RPS_HINTS, RPS_LABELS } from '../../game/rpsTypes'
+import type { MatchFormat, PublicRpsRoom, RpsLoadout } from '../../game/rpsTypes'
+import { MATCH_FORMAT_LABELS } from '../../game/rpsTypes'
+import { rpsLoadoutLabel } from '../../lib/loadoutStorage'
 import type { SavedGesture } from '../../types'
-
-const MOVES: RpsMove[] = ['rock', 'scissors', 'paper']
 
 type Props = {
   room: PublicRpsRoom | null
@@ -11,11 +10,11 @@ type Props = {
   roomCodeInput: string
   loadout: RpsLoadout
   gestures: SavedGesture[]
+  loadoutReady: boolean
   connected: boolean
   error: string | null
   onPlayerNameChange: (v: string) => void
   onRoomCodeInputChange: (v: string) => void
-  onLoadoutChange: (move: RpsMove, gestureId: string) => void
   onCreateRoom: () => void
   onJoinRoom: () => void
   onReady: () => void
@@ -30,11 +29,11 @@ export function RpsLobby({
   roomCodeInput,
   loadout,
   gestures,
+  loadoutReady,
   connected,
   error,
   onPlayerNameChange,
   onRoomCodeInputChange,
-  onLoadoutChange,
   onCreateRoom,
   onJoinRoom,
   onReady,
@@ -148,38 +147,22 @@ export function RpsLobby({
 
           {room.phase === 'lobby' && (
             <section className="rps-card">
-              <h2>手勢配置</h2>
-              <p className="rps-muted">為包（拳）、剪、揼各選一個手勢。建議錄製握拳、剪刀手、張開手掌。</p>
-              {gestures.length < 3 ? (
-                <p className="rps-warn">手勢不足 3 個，請管理員到設定頁錄製包、剪、揼手勢。</p>
+              <h2>準備</h2>
+              {loadoutReady ? (
+                <p className="rps-muted">已套用設定頁配對：{rpsLoadoutLabel(loadout, gestures)}</p>
               ) : (
-                <div className="rps-loadout">
-                  {MOVES.map((move) => (
-                    <label key={move} className="rps-loadout-row">
-                      <span>
-                        <strong>{RPS_LABELS[move]}</strong>
-                        <small>{RPS_HINTS[move]}</small>
-                      </span>
-                      <select
-                        value={loadout[move] ?? ''}
-                        onChange={(e) => onLoadoutChange(move, e.target.value)}
-                        disabled={me?.ready === true}
-                      >
-                        <option value="">選擇手勢</option>
-                        {gestures.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
+                <p className="rps-warn">
+                  尚未完成手勢配對。請管理員到{' '}
+                  <a className="rps-link" href="/">
+                    設定
+                  </a>{' '}
+                  為包／剪／揼各指定一個手勢。
+                </p>
               )}
               <button
                 type="button"
                 className="primary"
-                disabled={me?.ready || gestures.length < 3}
+                disabled={me?.ready || !loadoutReady}
                 onClick={onReady}
               >
                 {me?.ready ? '已準備' : '準備開打'}

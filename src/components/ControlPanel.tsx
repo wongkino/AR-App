@@ -1,7 +1,10 @@
 import { useState } from 'react'
+import { LoadoutSettings } from './LoadoutSettings'
 import { setAdminPassword } from '../lib/api'
 import { MAX_SAMPLES, sampleCount } from '../lib/gestureSamples'
 import { saveAdminPassword } from '../lib/storage'
+import type { MoveLoadout, MoveType } from '../game/types'
+import type { RpsLoadout, RpsMove } from '../game/rpsTypes'
 import type { AppMode, MatchResult, SavedGesture } from '../types'
 
 type Props = {
@@ -24,6 +27,10 @@ type Props = {
   onStartListen: () => void
   onStopListen: () => void
   lastMatch: MatchResult | null
+  fightLoadout: MoveLoadout
+  rpsLoadout: RpsLoadout
+  onFightLoadoutChange: (move: MoveType, gestureId: string) => void
+  onRpsLoadoutChange: (move: RpsMove, gestureId: string) => void
   gestures: SavedGesture[]
   onDelete: (id: string) => void
   onUpdate: (id: string, name: string) => void
@@ -49,6 +56,10 @@ export function ControlPanel({
   onStartListen,
   onStopListen,
   lastMatch,
+  fightLoadout,
+  rpsLoadout,
+  onFightLoadoutChange,
+  onRpsLoadoutChange,
   gestures,
   onDelete,
   onUpdate,
@@ -205,6 +216,15 @@ export function ControlPanel({
           )}
         </div>
       </section>
+
+      <LoadoutSettings
+        gestures={gestures}
+        fightLoadout={fightLoadout}
+        rpsLoadout={rpsLoadout}
+        onFightChange={onFightLoadoutChange}
+        onRpsChange={onRpsLoadoutChange}
+        disabled={busy}
+      />
 
       <section className="block">
         <div className="block-head">

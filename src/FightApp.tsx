@@ -6,30 +6,16 @@ import { fetchGestures } from './lib/api'
 import { FightGestureMatcher } from './lib/fightMatcher'
 import { FightSocket } from './lib/gameSocket'
 import { gestureTemplates } from './lib/gestureSamples'
+import {
+  isFightLoadoutComplete,
+  loadFightLoadout,
+  sanitizeFightLoadout,
+} from './lib/loadoutStorage'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
 import type { MoveLoadout, MoveType, PublicRoomState } from './game/types'
 import { MOVE_LABELS } from './game/types'
 import type { HandFrame, SavedGesture } from './types'
 import './FightApp.css'
-
-const DEFAULT_LOADOUT: MoveLoadout = {
-  punch: null,
-  kick: null,
-  special: null,
-  block: null,
-}
-
-function suggestLoadout(gestures: SavedGesture[]): MoveLoadout {
-  const byKeyword = (keywords: string[]) =>
-    gestures.find((g) => keywords.some((k) => g.name.includes(k)))?.id ?? null
-
-  return {
-    punch: byKeyword(['拳', 'punch', '打']) ?? gestures[0]?.id ?? null,
-    kick: byKeyword(['踢', 'kick', '腳']) ?? gestures[1]?.id ?? null,
-    special: byKeyword(['必殺', '大招', 'special']) ?? gestures[2]?.id ?? null,
-    block: byKeyword(['擋', '防', 'block']) ?? gestures[3]?.id ?? null,
-  }
-}
 
 export default function FightApp() {
   const [gestures, setGestures] = useState<SavedGesture[]>(() => loadGestures())
@@ -37,7 +23,7 @@ export default function FightApp() {
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [playerName, setPlayerName] = useState('玩家')
   const [roomCodeInput, setRoomCodeInput] = useState('')
-  const [loadout, setLoadout] = useState<MoveLoadout>(DEFAULT_LOADOUT)
+  const [loadout, setLoadout] = useState<MoveLoadout>(() => loadFightLoadout())
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
@@ -73,23 +59,20 @@ export default function FightApp() {
     return map
   }, [gestures])
 
+  const loadoutReady = isFightLoadoutComplete(loadout)
+
   useEffect(() => {
     void (async () => {
       try {
         const remote = await fetchGestures()
         setGestures((prev) => {
           const merged = mergeRemoteGestures(remote, prev)
-          setLoadout((current) => {
-            const hasAny = Object.values(current).some(Boolean)
-            return hasAny ? current : suggestLoadout(merged)
-          })
+          setLoadout(sanitizeFightLoadout(loadFightLoadout(), merged))
           return merged
         })
       } catch {
         setGestures((prev) => {
-          setLoadout((current) =>
-            Object.values(current).some(Boolean) ? current : suggestLoadout(prev),
-          )
+          setLoadout(sanitizeFightLoadout(loadFightLoadout(), prev))
           return prev
         })
       }
@@ -199,17 +182,12 @@ export default function FightApp() {
   }
 
   const onReady = () => {
-    const moves: MoveType[] = ['punch', 'kick', 'special', 'block']
-    if (moves.some((m) => !loadout[m])) {
-      setError('請為四種招式各選一個手勢')
+    if (!isFightLoadoutComplete(loadout)) {
+      setError('請先到設定頁完成拳／踢／必殺／擋的手勢配對')
       return
     }
     setError(null)
     socketRef.current.ready(loadout)
-  }
-
-  const onLoadoutChange = (move: MoveType, gestureId: string) => {
-    setLoadout((prev) => ({ ...prev, [move]: gestureId || null }))
   }
 
   return (
@@ -257,11 +235,11 @@ export default function FightApp() {
         roomCodeInput={roomCodeInput}
         loadout={loadout}
         gestures={gestures}
+        loadoutReady={loadoutReady}
         connected={connected}
         error={error}
         onPlayerNameChange={setPlayerName}
         onRoomCodeInputChange={setRoomCodeInput}
-        onLoadoutChange={onLoadoutChange}
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
         onReady={onReady}

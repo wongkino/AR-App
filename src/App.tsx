@@ -3,6 +3,14 @@ import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { fetchGestures, pushGestures } from './lib/api'
 import { MAX_SAMPLES, sampleCount } from './lib/gestureSamples'
+import {
+  loadFightLoadout,
+  loadRpsLoadout,
+  saveFightLoadout,
+  saveRpsLoadout,
+  sanitizeFightLoadout,
+  sanitizeRpsLoadout,
+} from './lib/loadoutStorage'
 import { GestureMatcher } from './lib/matcher'
 import {
   createId,
@@ -11,6 +19,8 @@ import {
   saveGesturesLocal,
   sharedGesturesForDb,
 } from './lib/storage'
+import type { MoveLoadout, MoveType } from './game/types'
+import type { RpsLoadout, RpsMove } from './game/rpsTypes'
 import type { AppMode, HandFrame, MatchResult, SavedGesture } from './types'
 import './App.css'
 
@@ -33,6 +43,8 @@ export default function App() {
   const [trainTargetId, setTrainTargetId] = useState<string | null>(null)
   const [lastMatch, setLastMatch] = useState<MatchResult | null>(null)
   const [matchFlash, setMatchFlash] = useState<string | null>(null)
+  const [fightLoadout, setFightLoadout] = useState<MoveLoadout>(() => loadFightLoadout())
+  const [rpsLoadout, setRpsLoadout] = useState<RpsLoadout>(() => loadRpsLoadout())
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
@@ -49,6 +61,16 @@ export default function App() {
   useEffect(() => {
     gesturesRef.current = gestures
     saveGesturesLocal(gestures)
+    setFightLoadout((prev) => {
+      const next = sanitizeFightLoadout(prev, gestures)
+      saveFightLoadout(next)
+      return next
+    })
+    setRpsLoadout((prev) => {
+      const next = sanitizeRpsLoadout(prev, gestures)
+      saveRpsLoadout(next)
+      return next
+    })
   }, [gestures])
 
   const flash = useCallback((msg: string) => {
@@ -276,6 +298,22 @@ export default function App() {
     [flash, trainTargetId],
   )
 
+  const onFightLoadoutChange = useCallback((move: MoveType, gestureId: string) => {
+    setFightLoadout((prev) => {
+      const next = { ...prev, [move]: gestureId || null }
+      saveFightLoadout(next)
+      return next
+    })
+  }, [])
+
+  const onRpsLoadoutChange = useCallback((move: RpsMove, gestureId: string) => {
+    setRpsLoadout((prev) => {
+      const next = { ...prev, [move]: gestureId || null }
+      saveRpsLoadout(next)
+      return next
+    })
+  }, [])
+
   const onUpdate = useCallback(
     (id: string, name: string) => {
       const trimmed = name.trim()
@@ -371,6 +409,10 @@ export default function App() {
         onStartListen={() => void onStartListen()}
         onStopListen={onStopListen}
         lastMatch={lastMatch}
+        fightLoadout={fightLoadout}
+        rpsLoadout={rpsLoadout}
+        onFightLoadoutChange={onFightLoadoutChange}
+        onRpsLoadoutChange={onRpsLoadoutChange}
         gestures={gestures}
         onDelete={onDelete}
         onUpdate={onUpdate}

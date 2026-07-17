@@ -7,29 +7,16 @@ import { gestureTemplates } from './lib/gestureSamples'
 import { RpsGestureMatcher } from './lib/rpsMatcher'
 import { RpsSocket } from './lib/rpsSocket'
 import { playCountdownTick, playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
+import {
+  isRpsLoadoutComplete,
+  loadRpsLoadout,
+  sanitizeRpsLoadout,
+} from './lib/loadoutStorage'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
 import type { PublicRpsRoom, RpsLoadout, RpsMove } from './game/rpsTypes'
 import { RPS_LABELS } from './game/rpsTypes'
 import type { HandFrame, SavedGesture } from './types'
 import './RpsApp.css'
-
-const DEFAULT_LOADOUT: RpsLoadout = {
-  rock: null,
-  scissors: null,
-  paper: null,
-}
-
-function suggestLoadout(gestures: SavedGesture[]): RpsLoadout {
-  const byKeyword = (keywords: string[]) =>
-    gestures.find((g) => keywords.some((k) => g.name.toLowerCase().includes(k.toLowerCase())))?.id ??
-    null
-
-  return {
-    rock: byKeyword(['包', '拳', 'rock', '石']) ?? gestures[0]?.id ?? null,
-    scissors: byKeyword(['剪', 'scissors']) ?? gestures[1]?.id ?? null,
-    paper: byKeyword(['揼', '布', 'paper', '掌']) ?? gestures[2]?.id ?? null,
-  }
-}
 
 export default function RpsApp() {
   const [gestures, setGestures] = useState<SavedGesture[]>(() => loadGestures())
@@ -37,7 +24,7 @@ export default function RpsApp() {
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [playerName, setPlayerName] = useState('玩家')
   const [roomCodeInput, setRoomCodeInput] = useState('')
-  const [loadout, setLoadout] = useState<RpsLoadout>(DEFAULT_LOADOUT)
+  const [loadout, setLoadout] = useState<RpsLoadout>(() => loadRpsLoadout())
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
@@ -69,22 +56,20 @@ export default function RpsApp() {
     return map
   }, [gestures])
 
+  const loadoutReady = isRpsLoadoutComplete(loadout)
+
   useEffect(() => {
     void (async () => {
       try {
         const remote = await fetchGestures()
         setGestures((prev) => {
           const merged = mergeRemoteGestures(remote, prev)
-          setLoadout((current) =>
-            Object.values(current).some(Boolean) ? current : suggestLoadout(merged),
-          )
+          setLoadout(sanitizeRpsLoadout(loadRpsLoadout(), merged))
           return merged
         })
       } catch {
         setGestures((prev) => {
-          setLoadout((current) =>
-            Object.values(current).some(Boolean) ? current : suggestLoadout(prev),
-          )
+          setLoadout(sanitizeRpsLoadout(loadRpsLoadout(), prev))
           return prev
         })
       }
@@ -207,18 +192,13 @@ export default function RpsApp() {
   }
 
   const onReady = () => {
-    const moves: RpsMove[] = ['rock', 'scissors', 'paper']
-    if (moves.some((m) => !loadout[m])) {
-      setError('請為包、剪、揼各選一個手勢')
+    if (!isRpsLoadoutComplete(loadout)) {
+      setError('請先到設定頁完成包／剪／揼的手勢配對')
       return
     }
     setError(null)
     void unlockSfx()
     socketRef.current.ready(loadout)
-  }
-
-  const onLoadoutChange = (move: RpsMove, gestureId: string) => {
-    setLoadout((prev) => ({ ...prev, [move]: gestureId || null }))
   }
 
   return (
@@ -276,11 +256,11 @@ export default function RpsApp() {
         roomCodeInput={roomCodeInput}
         loadout={loadout}
         gestures={gestures}
+        loadoutReady={loadoutReady}
         connected={connected}
         error={error}
         onPlayerNameChange={setPlayerName}
         onRoomCodeInputChange={setRoomCodeInput}
-        onLoadoutChange={onLoadoutChange}
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
         onReady={onReady}
