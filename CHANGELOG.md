@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.4.0] - 2026-07-17
+
+- feat: auto-start listening when the page opens (ec69071)
+
 ## [v0.3.0] - 2026-07-17
 
 - feat: use shared database directly instead of sync codes (150b0bc)
