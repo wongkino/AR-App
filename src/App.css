@@ -150,6 +150,26 @@ textarea {
   color: white;
 }
 
+.rec-stop {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  z-index: 4;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 999px;
+  min-height: 48px;
+  padding: 0.75rem 1.35rem;
+  background: #c0392b;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
 .listen-badge {
   background: var(--accent-2);
   color: #062a28;
@@ -561,10 +581,27 @@ button:disabled {
     gap: 0.9rem;
   }
 
+  /* Keep camera visible while scrolling the long control panel */
+  .stage {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin: -0.85rem -0.85rem 0;
+    padding: 0.85rem 0.85rem 0.55rem;
+    background: linear-gradient(180deg, #d5e0dd 0%, rgba(213, 224, 221, 0.96) 70%, transparent 100%);
+  }
+
   .viewport {
-    width: min(100%, 70dvw, 560px);
+    width: min(100%, 52dvh, 420px);
+    max-height: min(52dvh, 420px);
     aspect-ratio: 1 / 1;
     border-radius: var(--radius);
+    margin-inline: auto;
+  }
+
+  .app.is-recording .viewport {
+    width: min(100%, 58dvh, 480px);
+    max-height: min(58dvh, 480px);
   }
 
   .panel {
@@ -583,7 +620,13 @@ button:disabled {
 
 @media (max-width: 900px) {
   .viewport {
-    width: min(100%, 92dvw);
+    width: min(100%, 48dvh, 92dvw);
+    max-height: min(48dvh, 92dvw);
     aspect-ratio: 1 / 1;
+  }
+
+  .app.is-recording .viewport {
+    width: min(100%, 56dvh, 92dvw);
+    max-height: min(56dvh, 92dvw);
   }
 }

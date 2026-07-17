@@ -289,6 +289,13 @@ export default function App() {
     setRecordingCount(0)
     setMode('recording')
     await ensureCamera()
+    // Mobile: keep the camera in view (panel tap often scrolls it off-screen)
+    window.requestAnimationFrame(() => {
+      document.getElementById('camera-viewport')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
     flash(
       canEditRef.current
         ? '開始錄製（儲存後會寫入資料庫）'
@@ -415,10 +422,10 @@ export default function App() {
   }, [stopCamera])
 
   return (
-    <div className="app">
+    <div className={`app${mode === 'recording' ? ' is-recording' : ''}`}>
       <div className="stage">
         <div className="stage-bg" aria-hidden />
-        <div className="viewport">
+        <div className="viewport" id="camera-viewport">
           {!cameraOn && (
             <div className="camera-gate">
               <h2>{ready ? '正在開啟相機…' : '載入模型中…'}</h2>
@@ -442,7 +449,14 @@ export default function App() {
             disablePictureInPicture
           />
           <canvas ref={canvasRef} className="overlay" />
-          {mode === 'recording' && <div className="rec-badge">REC</div>}
+          {mode === 'recording' && (
+            <>
+              <div className="rec-badge">REC · {recordingCount}</div>
+              <button type="button" className="rec-stop" onClick={onStopRecord}>
+                停止並預覽
+              </button>
+            </>
+          )}
           {mode === 'listening' && <div className="listen-badge">LISTEN</div>}
         </div>
         {(error || (!ready && !error)) && (
