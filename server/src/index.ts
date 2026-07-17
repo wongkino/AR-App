@@ -118,15 +118,65 @@ app.delete('/api/gestures/:gestureId', requireAdmin, async (c) => {
 })
 
 /**
- * Cantonese (or other) TTS as audio — used on iOS where speechSynthesis
- * often stays silent when triggered from camera-frame callbacks.
+ * Cantonese (or other) TTS as audio — used when Web Speech is blocked (esp. iOS).
+ * Proxies Google Translate TTS with short in-memory cache + language fallbacks.
  */
+const ttsCache = new Map<string, { buf: ArrayBuffer; type: string; at: number }>()
+const TTS_CACHE_MAX = 80
+const TTS_CACHE_TTL_MS = 30 * 60 * 1000
+
+function ttsCacheGet(key: string): { buf: ArrayBuffer; type: string } | null {
+  const hit = ttsCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > TTS_CACHE_TTL_MS) {
+    ttsCache.delete(key)
+    return null
+  }
+  return { buf: hit.buf, type: hit.type }
+}
+
+function ttsCacheSet(key: string, buf: ArrayBuffer, type: string): void {
+  if (ttsCache.size >= TTS_CACHE_MAX) {
+    const oldest = ttsCache.keys().next().value
+    if (oldest) ttsCache.delete(oldest)
+  }
+  ttsCache.set(key, { buf, type, at: Date.now() })
+}
+
+async function fetchGoogleTts(text: string, lang: string): Promise<{ buf: ArrayBuffer; type: string }> {
+  const upstream = new URL('https://translate.google.com/translate_tts')
+  upstream.searchParams.set('ie', 'UTF-8')
+  upstream.searchParams.set('client', 'tw-ob')
+  upstream.searchParams.set('tl', lang)
+  upstream.searchParams.set('q', text)
+
+  const res = await fetch(upstream, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      Accept: '*/*',
+      Referer: 'https://translate.google.com/',
+    },
+  })
+  if (!res.ok) {
+    throw new Error(`upstream ${res.status}`)
+  }
+  const buf = await res.arrayBuffer()
+  if (buf.byteLength < 64) {
+    throw new Error('empty audio')
+  }
+  return {
+    buf,
+    type: res.headers.get('content-type') ?? 'audio/mpeg',
+  }
+}
+
 app.get('/api/tts', async (c) => {
   const text = (c.req.query('text') ?? '').trim().slice(0, 180)
   if (!text) return c.json({ error: '缺少文字' }, 400)
 
   const langRaw = (c.req.query('lang') ?? 'yue').trim().toLowerCase()
-  const lang =
+  const preferred =
     langRaw === 'yue' || langRaw === 'zh-hk' || langRaw === 'zh_hk'
       ? 'yue'
       : langRaw === 'zh-tw' || langRaw === 'zh_tw'
@@ -135,37 +185,45 @@ app.get('/api/tts', async (c) => {
           ? 'zh-CN'
           : langRaw.slice(0, 16)
 
-  const upstream = new URL('https://translate.google.com/translate_tts')
-  upstream.searchParams.set('ie', 'UTF-8')
-  upstream.searchParams.set('client', 'tw-ob')
-  upstream.searchParams.set('tl', lang)
-  upstream.searchParams.set('q', text)
+  // Prefer requested lang, then fall back so one blocked upstream doesn't fail the gesture
+  const langs = [...new Set([preferred, 'yue', 'zh-TW', 'zh-CN'])]
+  const cacheKey = `${preferred}::${text}`
 
-  try {
-    const res = await fetch(upstream, {
+  const cached = ttsCacheGet(cacheKey)
+  if (cached) {
+    return new Response(cached.buf, {
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-        Accept: '*/*',
-        Referer: 'https://translate.google.com/',
-      },
-    })
-    if (!res.ok) {
-      return c.json({ error: `TTS 服務回應 ${res.status}` }, 502)
-    }
-    const buf = await res.arrayBuffer()
-    if (buf.byteLength < 64) {
-      return c.json({ error: 'TTS 音訊無效' }, 502)
-    }
-    return new Response(buf, {
-      headers: {
-        'Content-Type': res.headers.get('content-type') ?? 'audio/mpeg',
+        'Content-Type': cached.type,
         'Cache-Control': 'public, max-age=600',
+        'X-TTS-Cache': 'hit',
       },
     })
-  } catch {
-    return c.json({ error: '無法取得語音' }, 502)
   }
+
+  let lastError = 'unknown'
+  for (const lang of langs) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (attempt > 0) {
+          await new Promise((r) => setTimeout(r, 200 * attempt))
+        }
+        const { buf, type } = await fetchGoogleTts(text, lang)
+        ttsCacheSet(cacheKey, buf, type)
+        return new Response(buf, {
+          headers: {
+            'Content-Type': type,
+            'Cache-Control': 'public, max-age=600',
+            'X-TTS-Cache': 'miss',
+            'X-TTS-Lang': lang,
+          },
+        })
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'fetch failed'
+      }
+    }
+  }
+
+  return c.json({ error: `無法取得語音（${lastError}）` }, 502)
 })
 
 const staticRoot = process.env.STATIC_DIR ?? join(process.cwd(), 'public')

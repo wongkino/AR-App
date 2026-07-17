@@ -208,23 +208,88 @@ async function speak(text: string): Promise<void> {
   const trimmed = text.trim()
   if (!trimmed) return
 
+  let ttsError: string | null = null
   try {
     await playTtsAudio(trimmed)
     return
-  } catch {
-    // fall through
+  } catch (err) {
+    ttsError = err instanceof Error ? err.message : 'TTS 失敗'
   }
 
-  if (isLikelyIOS()) {
-    throw new Error('無法播放語音，請確認網路與音量')
+  // Always fall back to Web Speech (including iOS) instead of a dead-end error
+  try {
+    await speakViaSynthesis(trimmed)
+    return
+  } catch (err) {
+    const synthError = err instanceof Error ? err.message : '系統朗讀失敗'
+    throw new Error(
+      ttsError?.includes('阻擋') || ttsError?.includes('NotAllowed')
+        ? '語音被瀏覽器阻擋，請點一下畫面後再試'
+        : `無法播放語音（${ttsError ?? '網路'}／${synthError}）`,
+    )
   }
-
-  await speakViaSynthesis(trimmed)
 }
 
-function playTtsAudio(text: string): Promise<void> {
-  const url = `/api/tts?text=${encodeURIComponent(text.slice(0, 180))}&lang=yue`
-  return playUrl(url)
+const ttsBlobCache = new Map<string, string>()
+
+async function playTtsAudio(text: string): Promise<void> {
+  const key = text
+  let objectUrl = ttsBlobCache.get(key)
+
+  if (!objectUrl) {
+    const langs = ['yue', 'zh-TW', 'zh-CN']
+    let lastErr = 'TTS 服務無回應'
+    let blob: Blob | null = null
+
+    for (const lang of langs) {
+      try {
+        const res = await fetch(
+          `/api/tts?text=${encodeURIComponent(text.slice(0, 180))}&lang=${encodeURIComponent(lang)}`,
+        )
+        if (!res.ok) {
+          let detail = `HTTP ${res.status}`
+          try {
+            const body = (await res.json()) as { error?: string }
+            if (body.error) detail = body.error
+          } catch {
+            // ignore
+          }
+          lastErr = detail
+          continue
+        }
+        const type = res.headers.get('content-type') ?? ''
+        const next = await res.blob()
+        if (next.size < 64) {
+          lastErr = 'TTS 音訊為空'
+          continue
+        }
+        if (type.includes('json') || type.includes('text/html')) {
+          lastErr = 'TTS 回應格式錯誤'
+          continue
+        }
+        blob = next
+        break
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : '網路錯誤'
+      }
+    }
+
+    if (!blob) {
+      throw new Error(lastErr)
+    }
+
+    objectUrl = URL.createObjectURL(blob)
+    if (ttsBlobCache.size >= 40) {
+      const oldest = ttsBlobCache.keys().next().value
+      if (oldest) {
+        URL.revokeObjectURL(ttsBlobCache.get(oldest)!)
+        ttsBlobCache.delete(oldest)
+      }
+    }
+    ttsBlobCache.set(key, objectUrl)
+  }
+
+  await playUrl(objectUrl)
 }
 
 async function speakViaSynthesis(text: string): Promise<void> {
@@ -277,7 +342,7 @@ async function speakViaSynthesis(text: string): Promise<void> {
         resolve()
         return
       }
-      reject(new Error('朗讀失敗，請確認裝置未靜音並已允許聲音'))
+      reject(new Error('系統朗讀失敗'))
     }
 
     speechSynthesis.speak(utter)
@@ -289,12 +354,21 @@ async function speakViaSynthesis(text: string): Promise<void> {
         settled = true
         window.clearInterval(resumeTimer)
         resumePreviewSoon()
-        reject(new Error('speech-not-started'))
+        reject(new Error('系統朗讀未開始'))
       }
     }, 450)
 
     window.setTimeout(finish, 12_000)
   })
+}
+
+function scheduleDurationSettle(
+  audio: HTMLAudioElement,
+  settle: () => void,
+): number {
+  const d = audio.duration
+  if (!Number.isFinite(d) || d <= 0 || d > 120) return 0
+  return window.setTimeout(() => settle(), Math.ceil(d * 1000) + 400)
 }
 
 function playUrl(url: string): Promise<void> {
@@ -303,6 +377,7 @@ function playUrl(url: string): Promise<void> {
 
     const audio = new Audio(url)
     audio.setAttribute('playsinline', 'true')
+    audio.preload = 'auto'
     currentAudio = audio
 
     let settled = false
@@ -327,32 +402,27 @@ function playUrl(url: string): Promise<void> {
 
     audio.onplaying = () => {
       resumePreviewSoon()
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        window.clearTimeout(durationTimer)
-        durationTimer = window.setTimeout(
-          () => settle(),
-          Math.ceil(audio.duration * 1000) + 350,
-        )
-      }
+      window.clearTimeout(durationTimer)
+      durationTimer = scheduleDurationSettle(audio, () => settle())
     }
 
     audio.onloadedmetadata = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        window.clearTimeout(durationTimer)
-        durationTimer = window.setTimeout(
-          () => settle(),
-          Math.ceil(audio.duration * 1000) + 350,
-        )
-      }
+      window.clearTimeout(durationTimer)
+      durationTimer = scheduleDurationSettle(audio, () => settle())
     }
 
     audio.onended = () => settle()
-    audio.onerror = () => settle(new Error('無法播放音訊，請檢查網址或格式'))
+    audio.onerror = () => settle(new Error('音訊解碼或載入失敗'))
 
     safetyTimer = window.setTimeout(() => settle(), 12_000)
 
     void audio.play().catch((err: unknown) => {
-      settle(err instanceof Error ? err : new Error('播放被瀏覽器阻擋，請先點一下畫面'))
+      const name = err instanceof DOMException ? err.name : ''
+      if (name === 'NotAllowedError') {
+        settle(new Error('播放被瀏覽器阻擋，請點一下畫面'))
+        return
+      }
+      settle(err instanceof Error ? err : new Error('播放失敗'))
     })
   })
 }
