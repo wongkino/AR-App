@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.18] - 2026-07-18
+
+- Fix fifteen-twenty speech calls and fist finger counting. (7f075c3)
+
 ## [v0.6.17] - 2026-07-18
 
 - Add WebRTC voice so players can hear each other's calls. (d456152)
