@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.17] - 2026-07-18
+
+- Add WebRTC voice so players can hear each other's calls. (d456152)
+
 ## [v0.6.16] - 2026-07-18
 
 - Use 4:3 camera viewports on mobile and settings. (8ab3782)
