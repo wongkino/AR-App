@@ -181,10 +181,11 @@ function resolveMoves(moveA: RpsMove | null, moveB: RpsMove | null): 'a' | 'b' |
   if (moveA && !moveB) return 'a'
   if (!moveA && moveB) return 'b'
   if (moveA === moveB) return 'draw'
+  // Labels: rock=包, scissors=剪, paper=揼 → 粵語：包贏揼、揼贏剪、剪贏包
   if (
-    (moveA === 'rock' && moveB === 'scissors') ||
-    (moveA === 'scissors' && moveB === 'paper') ||
-    (moveA === 'paper' && moveB === 'rock')
+    (moveA === 'rock' && moveB === 'paper') ||
+    (moveA === 'paper' && moveB === 'scissors') ||
+    (moveA === 'scissors' && moveB === 'rock')
   ) {
     return 'a'
   }

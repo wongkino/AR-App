@@ -252,6 +252,39 @@ export default function RpsApp() {
             {handCount > 0 ? `偵測到 ${handCount} 隻手` : '請將手部放入鏡頭'}
           </p>
         )}
+
+        {room?.phase === 'lobby' && (
+          <div className="rps-ready-bar">
+            {!loadoutReady && (
+              <p className="rps-warn">
+                共用手勢配對尚未完成，請管理員到設定頁設定。
+              </p>
+            )}
+            <button
+              type="button"
+              className="primary"
+              disabled={me?.ready || !loadoutReady || !cameraOn}
+              onClick={onReady}
+            >
+              {me?.ready ? '已準備' : '準備開打'}
+            </button>
+          </div>
+        )}
+
+        {room?.phase === 'finished' && (
+          <div className="rps-ready-bar">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                void unlockSfx()
+                socketRef.current.rematch()
+              }}
+            >
+              再戰一局
+            </button>
+          </div>
+        )}
       </div>
 
       <RpsLobby
@@ -269,11 +302,6 @@ export default function RpsApp() {
         onRoomCodeInputChange={setRoomCodeInput}
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
-        onReady={onReady}
-        onRematch={() => {
-          void unlockSfx()
-          socketRef.current.rematch()
-        }}
         onFormatChange={(format) => socketRef.current.setFormat(format)}
       />
     </div>

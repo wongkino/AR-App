@@ -406,8 +406,17 @@
   font-size: 0.9rem;
 }
 
-.fifteen-mute-btn {
-  margin-top: 0.65rem;
+.fifteen-ready-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.fifteen-ready-bar .fifteen-muted {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
 }
 
 .fifteen-score-card {

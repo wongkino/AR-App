@@ -18,8 +18,6 @@ type Props = {
   onRoomCodeInputChange: (v: string) => void
   onCreateRoom: () => void
   onJoinRoom: () => void
-  onReady: () => void
-  onRematch: () => void
   onFormatChange: (format: MatchFormat) => void
 }
 
@@ -38,8 +36,6 @@ export function RpsLobby({
   onRoomCodeInputChange,
   onCreateRoom,
   onJoinRoom,
-  onReady,
-  onRematch,
   onFormatChange,
 }: Props) {
   const me = room?.players.find((p) => p.id === playerId) ?? null
@@ -150,7 +146,7 @@ export function RpsLobby({
 
           {room.phase === 'lobby' && (
             <section className="rps-card">
-              <h2>準備</h2>
+              <h2>配對</h2>
               {loadoutReady ? (
                 <p className="rps-muted">已套用共用配對：{rpsLoadoutLabel(loadout, gestures)}</p>
               ) : (
@@ -162,22 +158,7 @@ export function RpsLobby({
                   為 ✋ 包／✌️ 剪／👊 揼各指定一個手勢。
                 </p>
               )}
-              <button
-                type="button"
-                className="primary"
-                disabled={me?.ready || !loadoutReady || !mediaReady}
-                onClick={onReady}
-              >
-                {me?.ready ? '已準備' : '準備開打'}
-              </button>
-            </section>
-          )}
-
-          {room.phase === 'finished' && (
-            <section className="rps-card">
-              <button type="button" className="primary" onClick={onRematch}>
-                再戰一局
-              </button>
+              <p className="rps-muted">準備按鈕固定喺鏡頭下方。</p>
             </section>
           )}
 

@@ -293,6 +293,35 @@ export default function FifteenApp() {
             {micOn ? (micMuted ? ' · 咪高峰已靜音' : ' · 語音通話開啟中') : ' · 無麥克風'}
           </p>
         )}
+
+        {room?.phase === 'lobby' && (
+          <div className="fifteen-ready-bar">
+            <button
+              type="button"
+              className="primary"
+              disabled={me?.ready || !cameraOn}
+              onClick={onReady}
+            >
+              {me?.ready ? '已準備' : '準備開打'}
+            </button>
+            <p className="fifteen-muted">至少 2 人全部準備後自動開打</p>
+          </div>
+        )}
+
+        {room?.phase === 'finished' && (
+          <div className="fifteen-ready-bar">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                void unlockSfx()
+                socketRef.current.rematch()
+              }}
+            >
+              再戰一局
+            </button>
+          </div>
+        )}
       </div>
 
       <FifteenLobby
@@ -310,12 +339,7 @@ export default function FifteenApp() {
         onRoomCodeInputChange={setRoomCodeInput}
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
-        onReady={onReady}
         onToggleMute={onToggleMute}
-        onRematch={() => {
-          void unlockSfx()
-          socketRef.current.rematch()
-        }}
         onFormatChange={(format) => socketRef.current.setFormat(format)}
         onHandModeChange={(mode) => socketRef.current.setHandMode(mode)}
       />

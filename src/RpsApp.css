@@ -357,6 +357,18 @@
   font-size: 0.9rem;
 }
 
+.rps-ready-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.rps-ready-bar .rps-warn {
+  margin: 0;
+  text-align: center;
+}
+
 .rps-error {
   margin: 0;
   color: #b42318;

@@ -16,9 +16,7 @@ type Props = {
   onRoomCodeInputChange: (v: string) => void
   onCreateRoom: () => void
   onJoinRoom: () => void
-  onReady: () => void
   onToggleMute: () => void
-  onRematch: () => void
   onFormatChange: (format: MatchFormat) => void
   onHandModeChange: (mode: HandMode) => void
 }
@@ -38,9 +36,7 @@ export function FifteenLobby({
   onRoomCodeInputChange,
   onCreateRoom,
   onJoinRoom,
-  onReady,
   onToggleMute,
-  onRematch,
   onFormatChange,
   onHandModeChange,
 }: Props) {
@@ -192,26 +188,7 @@ export function FifteenLobby({
                   {MATCH_FORMAT_LABELS[room.matchFormat]} · {HAND_MODE_LABELS[room.handMode]}
                 </p>
               )}
-            </section>
-          )}
-
-          {room.phase === 'lobby' && (
-            <section className="fifteen-card">
-              <h2>準備</h2>
-              <p className="fifteen-muted">
-                至少 2 人全部準備後自動開打。預設單手；房主可改雙手。
-              </p>
-              <button type="button" className="primary" disabled={me?.ready || !mediaReady} onClick={onReady}>
-                {me?.ready ? '已準備' : '準備開打'}
-              </button>
-            </section>
-          )}
-
-          {room.phase === 'finished' && (
-            <section className="fifteen-card">
-              <button type="button" className="primary" onClick={onRematch}>
-                再戰一局
-              </button>
+              <p className="fifteen-muted">準備按鈕固定喺鏡頭下方。</p>
             </section>
           )}
 
