@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.13] - 2026-07-18
+
+- Replace gesture fight with fifteen-twenty multiplayer. (47a19b6)
+
 ## [v0.6.12] - 2026-07-18
 
 - Remap RPS emojis to ✋包／✌️剪／👊揼. (62d020b)
