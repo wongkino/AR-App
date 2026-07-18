@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.23] - 2026-07-18
+
+- Upgrade Docker GitHub Actions to Node 24-compatible majors. (83ba351)
+
 ## [v0.6.22] - 2026-07-18
 
 - Upgrade GitHub Actions to Node 24-compatible checkout/setup-node v5. (0f48fca)
