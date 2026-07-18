@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.19] - 2026-07-18
+
+- Fix RPS win rules for Cantonese 包剪揼 and pin ready under camera. (f23c271)
+
 ## [v0.6.18] - 2026-07-18
 
 - Fix fifteen-twenty speech calls and fist finger counting. (7f075c3)
