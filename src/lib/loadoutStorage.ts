@@ -2,9 +2,6 @@ import type { MoveLoadout, MoveType } from '../game/types'
 import type { RpsLoadout, RpsMove } from '../game/rpsTypes'
 import type { SavedGesture } from '../types'
 
-const FIGHT_KEY = 'gesture-lab:fight-loadout'
-const RPS_KEY = 'gesture-lab:rps-loadout'
-
 export const EMPTY_FIGHT_LOADOUT: MoveLoadout = {
   punch: null,
   kick: null,
@@ -21,43 +18,30 @@ export const EMPTY_RPS_LOADOUT: RpsLoadout = {
 export const FIGHT_MOVES: MoveType[] = ['punch', 'kick', 'special', 'block']
 export const RPS_MOVES: RpsMove[] = ['rock', 'scissors', 'paper']
 
-function readJson<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return null
-    return JSON.parse(raw) as T
-  } catch {
-    return null
-  }
+export type SharedLoadouts = {
+  fight: MoveLoadout
+  rps: RpsLoadout
 }
 
-export function loadFightLoadout(): MoveLoadout {
-  const saved = readJson<Partial<MoveLoadout>>(FIGHT_KEY)
-  if (!saved) return { ...EMPTY_FIGHT_LOADOUT }
+export function emptySharedLoadouts(): SharedLoadouts {
+  return { fight: { ...EMPTY_FIGHT_LOADOUT }, rps: { ...EMPTY_RPS_LOADOUT } }
+}
+
+export function normalizeFightLoadout(raw: Partial<MoveLoadout> | null | undefined): MoveLoadout {
   return {
-    punch: saved.punch ?? null,
-    kick: saved.kick ?? null,
-    special: saved.special ?? null,
-    block: saved.block ?? null,
+    punch: raw?.punch || null,
+    kick: raw?.kick || null,
+    special: raw?.special || null,
+    block: raw?.block || null,
   }
 }
 
-export function saveFightLoadout(loadout: MoveLoadout): void {
-  localStorage.setItem(FIGHT_KEY, JSON.stringify(loadout))
-}
-
-export function loadRpsLoadout(): RpsLoadout {
-  const saved = readJson<Partial<RpsLoadout>>(RPS_KEY)
-  if (!saved) return { ...EMPTY_RPS_LOADOUT }
+export function normalizeRpsLoadout(raw: Partial<RpsLoadout> | null | undefined): RpsLoadout {
   return {
-    rock: saved.rock ?? null,
-    scissors: saved.scissors ?? null,
-    paper: saved.paper ?? null,
+    rock: raw?.rock || null,
+    scissors: raw?.scissors || null,
+    paper: raw?.paper || null,
   }
-}
-
-export function saveRpsLoadout(loadout: RpsLoadout): void {
-  localStorage.setItem(RPS_KEY, JSON.stringify(loadout))
 }
 
 /** Drop gesture ids that no longer exist in the library. */

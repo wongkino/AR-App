@@ -149,10 +149,10 @@ export function RpsLobby({
             <section className="rps-card">
               <h2>準備</h2>
               {loadoutReady ? (
-                <p className="rps-muted">已套用設定頁配對：{rpsLoadoutLabel(loadout, gestures)}</p>
+                <p className="rps-muted">已套用共用配對：{rpsLoadoutLabel(loadout, gestures)}</p>
               ) : (
                 <p className="rps-warn">
-                  尚未完成手勢配對。請管理員到{' '}
+                  共用手勢配對尚未完成。請管理員到{' '}
                   <a className="rps-link" href="/">
                     設定
                   </a>{' '}

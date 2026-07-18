@@ -8,6 +8,13 @@ import { cors } from 'hono/cors'
 import type { Context, Next } from 'hono'
 import { initDb, pool } from './db.js'
 import { gameHub } from './game.js'
+import {
+  emptySharedLoadouts,
+  ensureLoadoutTable,
+  getSharedLoadouts,
+  setSharedLoadouts,
+  type SharedLoadouts,
+} from './loadouts.js'
 import { rpsHub } from './rps.js'
 
 type GestureBody = {
@@ -156,6 +163,24 @@ app.delete('/api/gestures/:gestureId', requireAdmin, async (c) => {
   return c.json({ ok: true })
 })
 
+app.get('/api/loadouts', async (c) => {
+  const loadouts = await getSharedLoadouts()
+  return c.json({ loadouts })
+})
+
+app.put('/api/loadouts', requireAdmin, async (c) => {
+  const body = await c.req.json<{ loadouts?: SharedLoadouts }>().catch(() => ({} as { loadouts?: SharedLoadouts }))
+  const incoming = body.loadouts
+  if (!incoming || typeof incoming !== 'object') {
+    return c.json({ error: '無效的配對資料' }, 400)
+  }
+  const loadouts = await setSharedLoadouts({
+    fight: incoming.fight ?? emptySharedLoadouts().fight,
+    rps: incoming.rps ?? emptySharedLoadouts().rps,
+  })
+  return c.json({ ok: true, loadouts })
+})
+
 /**
  * Cantonese (or other) TTS as audio — used when Web Speech is blocked (esp. iOS).
  * Proxies Google Translate TTS with short in-memory cache + language fallbacks.
@@ -274,6 +299,7 @@ if (existsSync(staticRoot)) {
 const port = Number(process.env.PORT ?? 3001)
 
 await initDb()
+await ensureLoadoutTable()
 console.log(
   existsSync(staticRoot)
     ? `Gesture Lab (web+api) listening on :${port}`

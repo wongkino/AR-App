@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RpsArena } from './components/rps/RpsArena'
 import { RpsLobby } from './components/rps/RpsLobby'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
-import { fetchGestures } from './lib/api'
+import { fetchGestures, fetchLoadouts } from './lib/api'
 import { gestureTemplates } from './lib/gestureSamples'
 import { RpsGestureMatcher } from './lib/rpsMatcher'
 import { RpsSocket } from './lib/rpsSocket'
 import { playCountdownTick, playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
 import {
+  EMPTY_RPS_LOADOUT,
   isRpsLoadoutComplete,
-  loadRpsLoadout,
   sanitizeRpsLoadout,
 } from './lib/loadoutStorage'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
@@ -24,7 +24,7 @@ export default function RpsApp() {
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [playerName, setPlayerName] = useState('玩家')
   const [roomCodeInput, setRoomCodeInput] = useState('')
-  const [loadout, setLoadout] = useState<RpsLoadout>(() => loadRpsLoadout())
+  const [loadout, setLoadout] = useState<RpsLoadout>(() => ({ ...EMPTY_RPS_LOADOUT }))
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
@@ -61,15 +61,15 @@ export default function RpsApp() {
   useEffect(() => {
     void (async () => {
       try {
-        const remote = await fetchGestures()
+        const [remote, loadouts] = await Promise.all([fetchGestures(), fetchLoadouts()])
         setGestures((prev) => {
           const merged = mergeRemoteGestures(remote, prev)
-          setLoadout(sanitizeRpsLoadout(loadRpsLoadout(), merged))
+          setLoadout(sanitizeRpsLoadout(loadouts.rps, merged))
           return merged
         })
       } catch {
         setGestures((prev) => {
-          setLoadout(sanitizeRpsLoadout(loadRpsLoadout(), prev))
+          setLoadout(sanitizeRpsLoadout({ ...EMPTY_RPS_LOADOUT }, prev))
           return prev
         })
       }
@@ -193,7 +193,7 @@ export default function RpsApp() {
 
   const onReady = () => {
     if (!isRpsLoadoutComplete(loadout)) {
-      setError('請先到設定頁完成包／剪／揼的手勢配對')
+      setError('共用手勢配對尚未完成，請管理員到設定頁設定')
       return
     }
     setError(null)

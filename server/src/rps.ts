@@ -1,4 +1,5 @@
 import type { WSContext } from 'hono/ws'
+import { getSharedLoadouts, isRpsComplete } from './loadouts.js'
 
 export type MatchFormat = 'bo3' | 'bo5'
 
@@ -50,7 +51,7 @@ export type RpsRoomState = {
 export type ClientMessage =
   | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
   | { type: 'set_format'; format: MatchFormat }
-  | { type: 'ready'; loadout: RpsLoadout }
+  | { type: 'ready'; loadout?: RpsLoadout }
   | { type: 'throw'; move: RpsMove; gestureId: string; score: number }
   | { type: 'leave' }
   | { type: 'rematch' }
@@ -234,7 +235,7 @@ export class RpsHub {
         this.handleSetFormat(ws, msg.format)
         break
       case 'ready':
-        this.handleReady(ws, msg.loadout)
+        void this.handleReady(ws)
         break
       case 'throw':
         this.handleThrow(ws, msg.move, msg.gestureId, msg.score)
@@ -337,7 +338,7 @@ export class RpsHub {
     this.broadcastRoom(room.code)
   }
 
-  private handleReady(ws: WSContext, loadout: RpsLoadout): void {
+  private async handleReady(ws: WSContext): Promise<void> {
     const ctx = this.requireConnection(ws)
     if (!ctx) return
     const room = this.rooms.get(ctx.roomCode)
@@ -346,14 +347,14 @@ export class RpsHub {
     const player = room.players.find((p) => p.id === ctx.playerId)
     if (!player) return
 
+    const shared = await getSharedLoadouts()
     const moves: RpsMove[] = ['rock', 'scissors', 'paper']
     for (const move of moves) {
-      const gestureId = loadout[move]
-      player.loadout[move] = typeof gestureId === 'string' && gestureId ? gestureId : null
+      player.loadout[move] = shared.rps[move]
     }
 
-    if (moves.some((m) => !player.loadout[m])) {
-      this.send(ws, { type: 'error', message: '請為包、剪、揼各選一個手勢' })
+    if (!isRpsComplete(player.loadout)) {
+      this.send(ws, { type: 'error', message: '共用手勢配對尚未完成，請管理員到設定頁設定' })
       return
     }
 

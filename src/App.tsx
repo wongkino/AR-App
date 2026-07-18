@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ControlPanel } from './components/ControlPanel'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
-import { fetchGestures, pushGestures } from './lib/api'
+import { fetchGestures, fetchLoadouts, pushGestures, pushLoadouts } from './lib/api'
 import { MAX_SAMPLES, sampleCount } from './lib/gestureSamples'
 import {
-  loadFightLoadout,
-  loadRpsLoadout,
-  saveFightLoadout,
-  saveRpsLoadout,
+  EMPTY_FIGHT_LOADOUT,
+  EMPTY_RPS_LOADOUT,
   sanitizeFightLoadout,
   sanitizeRpsLoadout,
 } from './lib/loadoutStorage'
@@ -43,15 +41,17 @@ export default function App() {
   const [trainTargetId, setTrainTargetId] = useState<string | null>(null)
   const [lastMatch, setLastMatch] = useState<MatchResult | null>(null)
   const [matchFlash, setMatchFlash] = useState<string | null>(null)
-  const [fightLoadout, setFightLoadout] = useState<MoveLoadout>(() => loadFightLoadout())
-  const [rpsLoadout, setRpsLoadout] = useState<RpsLoadout>(() => loadRpsLoadout())
+  const [fightLoadout, setFightLoadout] = useState<MoveLoadout>(() => ({ ...EMPTY_FIGHT_LOADOUT }))
+  const [rpsLoadout, setRpsLoadout] = useState<RpsLoadout>(() => ({ ...EMPTY_RPS_LOADOUT }))
 
   const modeRef = useRef(mode)
   const gesturesRef = useRef(gestures)
   const recordBuf = useRef<HandFrame[]>([])
   const matcherRef = useRef(new GestureMatcher())
   const skipNextPush = useRef(false)
+  const skipNextLoadoutPush = useRef(true)
   const pushTimer = useRef<number | null>(null)
+  const loadoutPushTimer = useRef<number | null>(null)
   const matchFlashTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -61,16 +61,8 @@ export default function App() {
   useEffect(() => {
     gesturesRef.current = gestures
     saveGesturesLocal(gestures)
-    setFightLoadout((prev) => {
-      const next = sanitizeFightLoadout(prev, gestures)
-      saveFightLoadout(next)
-      return next
-    })
-    setRpsLoadout((prev) => {
-      const next = sanitizeRpsLoadout(prev, gestures)
-      saveRpsLoadout(next)
-      return next
-    })
+    setFightLoadout((prev) => sanitizeFightLoadout(prev, gestures))
+    setRpsLoadout((prev) => sanitizeRpsLoadout(prev, gestures))
   }, [gestures])
 
   const flash = useCallback((msg: string) => {
@@ -85,9 +77,12 @@ export default function App() {
   const reloadFromDb = useCallback(async () => {
     setDbStatus('loading')
     try {
-      const remote = await fetchGestures()
+      const [remote, loadouts] = await Promise.all([fetchGestures(), fetchLoadouts()])
       skipNextPush.current = true
+      skipNextLoadoutPush.current = true
       setGestures((prev) => mergeRemoteGestures(remote, prev))
+      setFightLoadout(sanitizeFightLoadout(loadouts.fight, remote))
+      setRpsLoadout(sanitizeRpsLoadout(loadouts.rps, remote))
       setDbStatus('ok')
     } catch (err) {
       setDbStatus('error')
@@ -120,6 +115,28 @@ export default function App() {
       if (pushTimer.current) window.clearTimeout(pushTimer.current)
     }
   }, [gestures])
+
+  useEffect(() => {
+    if (skipNextLoadoutPush.current) {
+      skipNextLoadoutPush.current = false
+      return
+    }
+    if (loadoutPushTimer.current) window.clearTimeout(loadoutPushTimer.current)
+    loadoutPushTimer.current = window.setTimeout(() => {
+      void (async () => {
+        setDbStatus('saving')
+        try {
+          await pushLoadouts({ fight: fightLoadout, rps: rpsLoadout })
+          setDbStatus('ok')
+        } catch {
+          setDbStatus('error')
+        }
+      })()
+    }, 600)
+    return () => {
+      if (loadoutPushTimer.current) window.clearTimeout(loadoutPushTimer.current)
+    }
+  }, [fightLoadout, rpsLoadout])
 
   const onFrame = useCallback((frame: HandFrame | null) => {
     if (!frame) return
@@ -299,19 +316,11 @@ export default function App() {
   )
 
   const onFightLoadoutChange = useCallback((move: MoveType, gestureId: string) => {
-    setFightLoadout((prev) => {
-      const next = { ...prev, [move]: gestureId || null }
-      saveFightLoadout(next)
-      return next
-    })
+    setFightLoadout((prev) => ({ ...prev, [move]: gestureId || null }))
   }, [])
 
   const onRpsLoadoutChange = useCallback((move: RpsMove, gestureId: string) => {
-    setRpsLoadout((prev) => {
-      const next = { ...prev, [move]: gestureId || null }
-      saveRpsLoadout(next)
-      return next
-    })
+    setRpsLoadout((prev) => ({ ...prev, [move]: gestureId || null }))
   }, [])
 
   const onUpdate = useCallback(

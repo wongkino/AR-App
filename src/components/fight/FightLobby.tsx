@@ -120,10 +120,10 @@ export function FightLobby({
             <section className="fight-card">
               <h2>準備</h2>
               {loadoutReady ? (
-                <p className="fight-muted">已套用設定頁配對：{fightLoadoutLabel(loadout, gestures)}</p>
+                <p className="fight-muted">已套用共用配對：{fightLoadoutLabel(loadout, gestures)}</p>
               ) : (
                 <p className="fight-warn">
-                  尚未完成招式配對。請管理員到{' '}
+                  共用招式配對尚未完成。請管理員到{' '}
                   <a className="fight-link" href="/">
                     設定
                   </a>{' '}

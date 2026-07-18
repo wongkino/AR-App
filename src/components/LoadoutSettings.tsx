@@ -27,9 +27,9 @@ export function LoadoutSettings({
 
   return (
     <section className="block">
-      <h2>遊戲手勢配對</h2>
+      <h2>共用手勢配對</h2>
       <p className="hint">
-        每個動作必須指定一個手勢。遊戲內不再顯示配置，開打時會直接使用這裡的設定。
+        全伺服器共用：所有玩家開打都用同一套配對。每個動作必須指定一個手勢。
       </p>
 
       <div className="loadout-settings">

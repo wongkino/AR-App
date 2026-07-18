@@ -1,4 +1,5 @@
 import type { WSContext } from 'hono/ws'
+import { getSharedLoadouts, isFightComplete } from './loadouts.js'
 
 export type MoveType = 'punch' | 'kick' | 'special' | 'block'
 
@@ -34,7 +35,7 @@ export type FightLogEntry = {
 
 export type ClientMessage =
   | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
-  | { type: 'ready'; loadout: MoveLoadout }
+  | { type: 'ready'; loadout?: MoveLoadout }
   | { type: 'attack'; move: MoveType; gestureId: string; score: number }
   | { type: 'leave' }
   | { type: 'rematch' }
@@ -166,7 +167,7 @@ export class GameHub {
         this.handleJoin(ws, normalizeRoomCode(msg.roomCode || ''), msg.playerName, Boolean(msg.create))
         break
       case 'ready':
-        this.handleReady(ws, msg.loadout)
+        void this.handleReady(ws)
         break
       case 'attack':
         this.handleAttack(ws, msg.move, msg.gestureId, msg.score)
@@ -236,7 +237,7 @@ export class GameHub {
     this.broadcastRoom(room.code)
   }
 
-  private handleReady(ws: WSContext, loadout: MoveLoadout): void {
+  private async handleReady(ws: WSContext): Promise<void> {
     const ctx = this.requireConnection(ws)
     if (!ctx) return
     const room = this.rooms.get(ctx.roomCode)
@@ -250,15 +251,14 @@ export class GameHub {
       return
     }
 
+    const shared = await getSharedLoadouts()
     const moves: MoveType[] = ['punch', 'kick', 'special', 'block']
     for (const move of moves) {
-      const gestureId = loadout[move]
-      player.loadout[move] = typeof gestureId === 'string' && gestureId ? gestureId : null
+      player.loadout[move] = shared.fight[move]
     }
 
-    const assigned = moves.filter((m) => player.loadout[m])
-    if (assigned.length < 4) {
-      this.send(ws, { type: 'error', message: '請為拳、踢、必殺、擋各選一個手勢' })
+    if (!isFightComplete(player.loadout)) {
+      this.send(ws, { type: 'error', message: '共用招式配對尚未完成，請管理員到設定頁設定' })
       return
     }
 

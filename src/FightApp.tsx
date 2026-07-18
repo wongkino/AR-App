@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FightHud } from './components/fight/FightHud'
 import { FightLobby } from './components/fight/FightLobby'
 import { useHandLandmarker } from './hooks/useHandLandmarker'
-import { fetchGestures } from './lib/api'
+import { fetchGestures, fetchLoadouts } from './lib/api'
 import { FightGestureMatcher } from './lib/fightMatcher'
 import { FightSocket } from './lib/gameSocket'
 import { gestureTemplates } from './lib/gestureSamples'
 import {
+  EMPTY_FIGHT_LOADOUT,
   isFightLoadoutComplete,
-  loadFightLoadout,
   sanitizeFightLoadout,
 } from './lib/loadoutStorage'
 import { loadGestures, mergeRemoteGestures } from './lib/storage'
@@ -23,7 +23,7 @@ export default function FightApp() {
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [playerName, setPlayerName] = useState('玩家')
   const [roomCodeInput, setRoomCodeInput] = useState('')
-  const [loadout, setLoadout] = useState<MoveLoadout>(() => loadFightLoadout())
+  const [loadout, setLoadout] = useState<MoveLoadout>(() => ({ ...EMPTY_FIGHT_LOADOUT }))
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
@@ -64,15 +64,15 @@ export default function FightApp() {
   useEffect(() => {
     void (async () => {
       try {
-        const remote = await fetchGestures()
+        const [remote, loadouts] = await Promise.all([fetchGestures(), fetchLoadouts()])
         setGestures((prev) => {
           const merged = mergeRemoteGestures(remote, prev)
-          setLoadout(sanitizeFightLoadout(loadFightLoadout(), merged))
+          setLoadout(sanitizeFightLoadout(loadouts.fight, merged))
           return merged
         })
       } catch {
         setGestures((prev) => {
-          setLoadout(sanitizeFightLoadout(loadFightLoadout(), prev))
+          setLoadout(sanitizeFightLoadout({ ...EMPTY_FIGHT_LOADOUT }, prev))
           return prev
         })
       }
@@ -183,7 +183,7 @@ export default function FightApp() {
 
   const onReady = () => {
     if (!isFightLoadoutComplete(loadout)) {
-      setError('請先到設定頁完成拳／踢／必殺／擋的手勢配對')
+      setError('共用招式配對尚未完成，請管理員到設定頁設定')
       return
     }
     setError(null)
