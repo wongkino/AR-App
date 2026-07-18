@@ -1,16 +1,11 @@
-import type { MatchFormat, PublicRpsRoom, RpsLoadout } from '../../game/rpsTypes'
+import type { MatchFormat, PublicRpsRoom } from '../../game/rpsTypes'
 import { MATCH_FORMAT_LABELS } from '../../game/rpsTypes'
-import { rpsLoadoutLabel } from '../../lib/loadoutStorage'
-import type { SavedGesture } from '../../types'
 
 type Props = {
   room: PublicRpsRoom | null
   playerId: string | null
   playerName: string
   roomCodeInput: string
-  loadout: RpsLoadout
-  gestures: SavedGesture[]
-  loadoutReady: boolean
   connected: boolean
   error: string | null
   mediaReady: boolean
@@ -26,9 +21,6 @@ export function RpsLobby({
   playerId,
   playerName,
   roomCodeInput,
-  loadout,
-  gestures,
-  loadoutReady,
   connected,
   error,
   mediaReady,
@@ -141,24 +133,6 @@ export function RpsLobby({
               ) : (
                 <p className="rps-muted">{MATCH_FORMAT_LABELS[room.matchFormat]}</p>
               )}
-            </section>
-          )}
-
-          {room.phase === 'lobby' && (
-            <section className="rps-card">
-              <h2>配對</h2>
-              {loadoutReady ? (
-                <p className="rps-muted">已套用共用配對：{rpsLoadoutLabel(loadout, gestures)}</p>
-              ) : (
-                <p className="rps-warn">
-                  共用手勢配對尚未完成。請管理員到{' '}
-                  <a className="rps-link" href="/">
-                    設定
-                  </a>{' '}
-                  為 ✋ 包／✌️ 剪／👊 揼各指定一個手勢。
-                </p>
-              )}
-              <p className="rps-muted">準備按鈕固定喺鏡頭下方。</p>
             </section>
           )}
 

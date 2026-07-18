@@ -292,9 +292,6 @@ export default function RpsApp() {
         playerId={playerId}
         playerName={playerName}
         roomCodeInput={roomCodeInput}
-        loadout={loadout}
-        gestures={gestures}
-        loadoutReady={loadoutReady}
         connected={connected}
         error={error}
         mediaReady={cameraOn}
