@@ -15,7 +15,7 @@ const GAMES = [
     title: '包剪揼',
     desc: '2 人包剪揼。三盤兩勝，倒數後同時出招。',
     tag: 'Multiplayer',
-    emoji: '👊',
+    emoji: '✋',
   },
 ] as const
 

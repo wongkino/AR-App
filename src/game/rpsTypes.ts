@@ -53,21 +53,21 @@ export type ServerMessage =
   | { type: 'error'; message: string }
 
 export const RPS_LABELS: Record<RpsMove, string> = {
-  rock: '👊 包',
+  rock: '✋ 包',
   scissors: '✌️ 剪',
-  paper: '✋ 揼',
+  paper: '👊 揼',
 }
 
 export const RPS_HINTS: Record<RpsMove, string> = {
-  rock: '握拳',
+  rock: '張開手掌',
   scissors: '剪刀手',
-  paper: '張開手掌',
+  paper: '握拳',
 }
 
 export const RPS_EMOJI: Record<RpsMove, string> = {
-  rock: '👊',
+  rock: '✋',
   scissors: '✌️',
-  paper: '✋',
+  paper: '👊',
 }
 
 export const MATCH_FORMAT_LABELS: Record<MatchFormat, string> = {
