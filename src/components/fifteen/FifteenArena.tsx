@@ -1,10 +1,9 @@
 import type { FifteenCall, PublicFifteenPlayer, PublicFifteenRoom } from '../../game/fifteenTypes'
-import { FIFTEEN_CALLS } from '../../game/fifteenTypes'
+import { FIFTEEN_CALLS, HAND_MODE_LABELS } from '../../game/fifteenTypes'
 
 type Props = {
   room: PublicFifteenRoom
   me: PublicFifteenPlayer | null
-  opponent: PublicFifteenPlayer | null
   playerId: string | null
   liveFingers: number
   missMessage: string | null
@@ -15,7 +14,6 @@ type Props = {
 export function FifteenArena({
   room,
   me,
-  opponent,
   playerId,
   liveFingers,
   missMessage,
@@ -34,28 +32,24 @@ export function FifteenArena({
         </div>
         <div className="fifteen-arena-round">
           <span className="fifteen-throw-hint">{frozen ? '變手指…' : '鬥快叫數！'}</span>
-          <small>先贏 {room.winTarget} 分 · 即時變體</small>
+          <small>
+            {room.players.length} 人 · {HAND_MODE_LABELS[room.handMode]} · 先贏 {room.winTarget} 分
+          </small>
         </div>
         <div className="fifteen-arena-score right">
-          <span>{opponent?.name ?? '對手'}</span>
-          <strong>{opponent?.score ?? 0}</strong>
+          <span>總和</span>
+          <strong>{room.sum ?? '—'}</strong>
         </div>
       </div>
 
       <div className="fifteen-throw-panel">
-        <div className="fifteen-live-stats">
-          <div>
-            <span>你</span>
-            <strong>{liveFingers}</strong>
-          </div>
-          <div>
-            <span>對手</span>
-            <strong>{opponent?.fingers ?? '—'}</strong>
-          </div>
-          <div className="fifteen-sum-stat">
-            <span>總和</span>
-            <strong>{room.sum ?? '—'}</strong>
-          </div>
+        <div className="fifteen-fingers-row">
+          {room.players.map((p) => (
+            <div key={p.id} className={`fifteen-finger-chip${p.id === playerId ? ' self' : ''}`}>
+              <span>{p.name}</span>
+              <strong>{p.id === playerId ? liveFingers : p.fingers}</strong>
+            </div>
+          ))}
         </div>
 
         {showHit ? (
@@ -63,8 +57,8 @@ export function FifteenArena({
         ) : (
           <p className="fifteen-throw-status">
             {speechOk
-              ? '持續變手指，睇準總和就大聲叫「五／十／十五／二十」'
-              : '持續變手指，睇準總和就撳下方叫數'}
+              ? `持續變手指（最多 ${room.fingersMax}），睇準總和就叫「五／十／十五／二十」`
+              : `持續變手指（最多 ${room.fingersMax}），睇準總和就撳下方叫數`}
           </p>
         )}
 

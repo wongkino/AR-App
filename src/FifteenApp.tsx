@@ -6,7 +6,7 @@ import { countFingers } from './lib/fingerCount'
 import { FifteenSocket } from './lib/fifteenSocket'
 import { FifteenSpeechListener, speechRecognitionSupported } from './lib/fifteenSpeech'
 import { playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
-import type { FifteenCall, PublicFifteenRoom } from './game/fifteenTypes'
+import type { FifteenCall, HandMode, PublicFifteenRoom } from './game/fifteenTypes'
 import type { HandFrame } from './types'
 import './FifteenApp.css'
 
@@ -18,6 +18,7 @@ export default function FifteenApp() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
+  const [speechArmed, setSpeechArmed] = useState(false)
   const [liveFingers, setLiveFingers] = useState(0)
   const [missMessage, setMissMessage] = useState<string | null>(null)
   const [speechOk] = useState(() => speechRecognitionSupported())
@@ -27,12 +28,14 @@ export default function FifteenApp() {
   const speechRef = useRef(new FifteenSpeechListener())
   const roomRef = useRef(room)
   const playerIdRef = useRef(playerId)
+  const handModeRef = useRef<HandMode>('one')
   const lastSentFingers = useRef<number | null>(null)
   const missTimer = useRef<number | null>(null)
   const callBusyRef = useRef(false)
 
   useEffect(() => {
     roomRef.current = room
+    if (room?.handMode) handModeRef.current = room.handMode
   }, [room])
 
   useEffect(() => {
@@ -101,24 +104,28 @@ export default function FifteenApp() {
     }
   }, [flashMiss])
 
-  // Speech while playing (not frozen)
+  // Keep speech warm once armed; only score calls during playing
   useEffect(() => {
-    const frozen = Boolean(room?.freezeUntil && room.freezeUntil > Date.now())
-    if (room?.phase !== 'playing' || frozen) {
+    if (!speechArmed || !speechOk) {
       speechRef.current.stop()
       return
     }
 
-    void unlockSfx()
+    const frozen = Boolean(room?.freezeUntil && room.freezeUntil > Date.now())
+    if (room?.phase === 'playing' && frozen) {
+      speechRef.current.stop()
+      return
+    }
+
     speechRef.current.start((call) => {
-      sendCall(call)
+      if (roomRef.current?.phase === 'playing') sendCall(call)
     })
 
     return () => speechRef.current.stop()
-  }, [room?.phase, room?.freezeUntil, room?.lastHit?.at, now, sendCall])
+  }, [speechArmed, speechOk, room?.phase, room?.freezeUntil, room?.lastHit?.at, now, sendCall])
 
   const onFrame = useCallback((frame: HandFrame | null) => {
-    const fingers = countFingers(frame)
+    const fingers = countFingers(frame, handModeRef.current)
     setLiveFingers(fingers)
 
     const currentRoom = roomRef.current
@@ -132,20 +139,18 @@ export default function FifteenApp() {
   const { videoRef, canvasRef, ready, error: cameraError, handCount, startCamera, stopCamera } =
     useHandLandmarker(onFrame)
 
-  const ensureCamera = useCallback(async () => {
-    if (cameraOn) return
+  const openMedia = useCallback(async () => {
+    await unlockSfx()
     await startCamera()
     setCameraOn(true)
-  }, [cameraOn, startCamera])
-
-  useEffect(() => {
-    if (room?.phase === 'playing') {
-      lastSentFingers.current = null
-      void ensureCamera()
-    }
-  }, [room?.phase, ensureCamera])
+    if (speechOk) setSpeechArmed(true)
+  }, [speechOk, startCamera])
 
   useEffect(() => () => stopCamera(), [stopCamera])
+
+  useEffect(() => {
+    if (room?.phase === 'playing') lastSentFingers.current = null
+  }, [room?.phase])
 
   useEffect(() => {
     if (room?.phase !== 'playing' || !room.freezeUntil) return
@@ -160,12 +165,15 @@ export default function FifteenApp() {
       : room
 
   const me = room?.players.find((p) => p.id === playerId) ?? null
-  const opponent = room?.players.find((p) => p.id !== playerId) ?? null
 
   const onCreateRoom = () => {
     const code = roomCodeInput.trim()
     if (!/^[A-Za-z0-9]{4}$/.test(code)) {
       setError('請輸入四位英數房間代碼')
+      return
+    }
+    if (!cameraOn) {
+      setError('請先開啟相機')
       return
     }
     setError(null)
@@ -179,14 +187,23 @@ export default function FifteenApp() {
       setError('請輸入四位英數房間代碼')
       return
     }
+    if (!cameraOn) {
+      setError('請先開啟相機')
+      return
+    }
     setError(null)
     void unlockSfx()
     socketRef.current.join(code, playerName.trim() || '玩家')
   }
 
   const onReady = () => {
+    if (!cameraOn) {
+      setError('請先開啟相機')
+      return
+    }
     setError(null)
     void unlockSfx()
+    if (speechOk && !speechArmed) setSpeechArmed(true)
     socketRef.current.ready()
   }
 
@@ -196,26 +213,19 @@ export default function FifteenApp() {
         <div className="fifteen-viewport">
           {!cameraOn && (
             <div className="fifteen-camera-gate">
-              <h2>{ready ? '對戰需要相機' : '載入模型中…'}</h2>
-              <p>開打後持續伸手指變體，睇準雙方總和就叫 5／10／15／20，鬥快叫中得分。</p>
-              {room?.phase === 'playing' && (
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!ready}
-                  onClick={() => {
-                    void unlockSfx()
-                    void ensureCamera()
-                  }}
-                >
-                  開啟相機
-                </button>
-              )}
+              <h2>{ready ? '進入遊戲前請先開鏡頭' : '載入模型中…'}</h2>
+              <p>
+                開好相機{speechOk ? '與語音' : ''} 再建立／加入房間，開打就唔使趕住授權。
+                多人可選單手或雙手，持續變手指鬥快叫中總和。
+              </p>
+              <button type="button" className="primary" disabled={!ready} onClick={() => void openMedia()}>
+                {speechOk ? '開啟相機與語音' : '開啟相機'}
+              </button>
             </div>
           )}
           <video ref={videoRef} className="fifteen-cam" playsInline muted autoPlay disablePictureInPicture />
           <canvas ref={canvasRef} className="fifteen-overlay" />
-          {room?.phase === 'playing' && <div className="fifteen-live-badge">LIVE</div>}
+          {cameraOn && <div className="fifteen-live-badge">{room?.phase === 'playing' ? 'LIVE' : 'READY'}</div>}
         </div>
 
         {cameraError && <p className="fifteen-stage-note">{cameraError}</p>}
@@ -224,7 +234,6 @@ export default function FifteenApp() {
           <FifteenArena
             room={roomForArena}
             me={me}
-            opponent={opponent}
             playerId={playerId}
             liveFingers={liveFingers}
             missMessage={missMessage}
@@ -233,9 +242,11 @@ export default function FifteenApp() {
           />
         )}
 
-        {room?.phase === 'playing' && (
+        {cameraOn && (
           <p className="fifteen-hand-hint">
-            {handCount > 0 ? `偵測到 ${handCount} 隻手 · 你的指數 ${liveFingers}` : '請將手部放入鏡頭'}
+            {handCount > 0
+              ? `偵測到 ${handCount} 隻手 · 指數 ${liveFingers}${room ? `／${room.fingersMax}` : ''}`
+              : '請將手部放入鏡頭'}
           </p>
         )}
       </div>
@@ -248,6 +259,7 @@ export default function FifteenApp() {
         connected={connected}
         error={error}
         speechOk={speechOk}
+        mediaReady={cameraOn}
         onPlayerNameChange={setPlayerName}
         onRoomCodeInputChange={setRoomCodeInput}
         onCreateRoom={onCreateRoom}
@@ -258,6 +270,7 @@ export default function FifteenApp() {
           socketRef.current.rematch()
         }}
         onFormatChange={(format) => socketRef.current.setFormat(format)}
+        onHandModeChange={(mode) => socketRef.current.setHandMode(mode)}
       />
     </div>
   )

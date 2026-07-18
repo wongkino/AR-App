@@ -1,6 +1,7 @@
 import type { WSContext } from 'hono/ws'
 
 export type MatchFormat = 'bo3' | 'bo5'
+export type HandMode = 'one' | 'two'
 export type FifteenCall = 5 | 10 | 15 | 20
 export type RoomPhase = 'lobby' | 'playing' | 'finished'
 
@@ -25,7 +26,6 @@ export type FifteenPlayerState = {
   ready: boolean
   score: number
   fingers: number
-  /** Ignore calls until this timestamp (miss spam / post-hit). */
   callBlockedUntil: number
 }
 
@@ -35,8 +35,8 @@ export type FifteenRoomState = {
   players: FifteenPlayerState[]
   winnerId: string | null
   matchFormat: MatchFormat
+  handMode: HandMode
   lastHit: HitResult | null
-  /** Global freeze after a hit — fingers still update, calls ignored. */
   freezeUntil: number
   log: FifteenLogEntry[]
   updatedAt: number
@@ -45,6 +45,7 @@ export type FifteenRoomState = {
 export type ClientMessage =
   | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
   | { type: 'set_format'; format: MatchFormat }
+  | { type: 'set_hand_mode'; handMode: HandMode }
   | { type: 'ready' }
   | { type: 'fingers'; count: number }
   | { type: 'call'; call: FifteenCall }
@@ -65,7 +66,10 @@ export type PublicFifteenRoom = {
   players: PublicFifteenPlayer[]
   winnerId: string | null
   matchFormat: MatchFormat
+  handMode: HandMode
   winTarget: number
+  maxPlayers: number
+  fingersMax: number
   sum: number | null
   lastHit: HitResult | null
   freezeUntil: number
@@ -81,6 +85,8 @@ export type ServerMessage =
   | { type: 'error'; message: string }
 
 const DEFAULT_MATCH_FORMAT: MatchFormat = 'bo3'
+const DEFAULT_HAND_MODE: HandMode = 'one'
+const MAX_PLAYERS = 6
 const ROOM_TTL_MS = 30 * 60 * 1000
 const HIT_FREEZE_MS = 1400
 const MISS_BLOCK_MS = 700
@@ -98,6 +104,14 @@ function winTargetFor(format: MatchFormat): number {
 
 function formatLabel(format: MatchFormat): string {
   return format === 'bo3' ? '先贏 2 分' : '先贏 3 分'
+}
+
+function handModeLabel(mode: HandMode): string {
+  return mode === 'one' ? '單手（每人最多 5）' : '雙手（每人最多 10）'
+}
+
+function fingersMaxFor(mode: HandMode): number {
+  return mode === 'one' ? 5 : 10
 }
 
 function createPlayer(name: string): FifteenPlayerState {
@@ -123,9 +137,9 @@ function makeLog(text: string): FifteenLogEntry {
   return { id: crypto.randomUUID(), at: Date.now(), text }
 }
 
-function clampFingers(raw: number): number {
+function clampFingers(raw: number, max: number): number {
   if (!Number.isFinite(raw)) return 0
-  return Math.max(0, Math.min(10, Math.round(raw)))
+  return Math.max(0, Math.min(max, Math.round(raw)))
 }
 
 function isValidCall(value: unknown): value is FifteenCall {
@@ -144,7 +158,7 @@ function toPublicPlayer(player: FifteenPlayerState): PublicFifteenPlayer {
 
 function liveSum(room: FifteenRoomState): number | null {
   if (room.phase !== 'playing' || room.players.length < 2) return null
-  return room.players[0].fingers + room.players[1].fingers
+  return room.players.reduce((s, p) => s + p.fingers, 0)
 }
 
 function toPublicRoom(room: FifteenRoomState): PublicFifteenRoom {
@@ -155,7 +169,10 @@ function toPublicRoom(room: FifteenRoomState): PublicFifteenRoom {
     players: room.players.map(toPublicPlayer),
     winnerId: room.winnerId,
     matchFormat: room.matchFormat,
+    handMode: room.handMode,
     winTarget: winTargetFor(room.matchFormat),
+    maxPlayers: MAX_PLAYERS,
+    fingersMax: fingersMaxFor(room.handMode),
     sum: liveSum(room),
     lastHit: room.lastHit,
     freezeUntil: room.freezeUntil,
@@ -168,9 +185,7 @@ export class FifteenHub {
   private rooms = new Map<string, FifteenRoomState>()
   private connections = new Map<WSContext, Connection>()
 
-  handleOpen(_ws: WSContext): void {
-    // wait for join
-  }
+  handleOpen(_ws: WSContext): void {}
 
   handleClose(ws: WSContext): void {
     const conn = this.connections.get(ws)
@@ -194,6 +209,9 @@ export class FifteenHub {
         break
       case 'set_format':
         this.handleSetFormat(ws, msg.format)
+        break
+      case 'set_hand_mode':
+        this.handleSetHandMode(ws, msg.handMode)
         break
       case 'ready':
         this.handleReady(ws)
@@ -241,9 +259,10 @@ export class FifteenHub {
         players: [],
         winnerId: null,
         matchFormat: DEFAULT_MATCH_FORMAT,
+        handMode: DEFAULT_HAND_MODE,
         lastHit: null,
         freezeUntil: 0,
-        log: [makeLog('房間已建立，等待對手加入…')],
+        log: [makeLog('房間已建立，等待玩家加入…')],
         updatedAt: Date.now(),
       }
       this.rooms.set(requestedCode, room)
@@ -257,8 +276,8 @@ export class FifteenHub {
       return
     }
 
-    if (room.players.length >= 2) {
-      this.send(ws, { type: 'error', message: '房間已滿（最多 2 人）' })
+    if (room.players.length >= MAX_PLAYERS) {
+      this.send(ws, { type: 'error', message: `房間已滿（最多 ${MAX_PLAYERS} 人）` })
       return
     }
 
@@ -299,6 +318,33 @@ export class FifteenHub {
     this.broadcastRoom(room.code)
   }
 
+  private handleSetHandMode(ws: WSContext, handMode: HandMode): void {
+    const ctx = this.requireConnection(ws)
+    if (!ctx) return
+    const room = this.rooms.get(ctx.roomCode)
+    if (!room || room.phase !== 'lobby') return
+
+    if (room.players[0]?.id !== ctx.playerId) {
+      this.send(ws, { type: 'error', message: '只有房主可以更改手勢模式' })
+      return
+    }
+
+    if (handMode !== 'one' && handMode !== 'two') {
+      this.send(ws, { type: 'error', message: '無效的手勢模式' })
+      return
+    }
+
+    if (room.players.some((p) => p.ready)) {
+      this.send(ws, { type: 'error', message: '已有玩家準備，無法更改手勢模式' })
+      return
+    }
+
+    room.handMode = handMode
+    room.updatedAt = Date.now()
+    room.log.push(makeLog(`手勢模式：${handModeLabel(handMode)}`))
+    this.broadcastRoom(room.code)
+  }
+
   private handleReady(ws: WSContext): void {
     const ctx = this.requireConnection(ws)
     if (!ctx) return
@@ -312,7 +358,7 @@ export class FifteenHub {
     room.updatedAt = Date.now()
     room.log.push(makeLog(`${player.name} 已準備`))
 
-    if (room.players.length === 2 && room.players.every((p) => p.ready)) {
+    if (room.players.length >= 2 && room.players.every((p) => p.ready)) {
       this.startMatch(room)
     } else {
       this.broadcastRoom(room.code)
@@ -329,7 +375,11 @@ export class FifteenHub {
       player.fingers = 0
       player.callBlockedUntil = 0
     }
-    room.log.push(makeLog(`開始！持續變手指，先叫中總和（5／10／15／20）得分 · ${formatLabel(room.matchFormat)}`))
+    room.log.push(
+      makeLog(
+        `開始！${handModeLabel(room.handMode)} · ${room.players.length} 人 · 先叫中總和得分 · ${formatLabel(room.matchFormat)}`,
+      ),
+    )
     room.updatedAt = Date.now()
     this.broadcastRoom(room.code)
   }
@@ -343,7 +393,7 @@ export class FifteenHub {
     const player = room.players.find((p) => p.id === ctx.playerId)
     if (!player) return
 
-    const next = clampFingers(count)
+    const next = clampFingers(count, fingersMaxFor(room.handMode))
     if (player.fingers === next) return
 
     player.fingers = next
@@ -357,8 +407,7 @@ export class FifteenHub {
     const room = this.rooms.get(ctx.roomCode)
     if (!room || room.phase !== 'playing') return
 
-    const [a, b] = room.players
-    if (!a || !b) return
+    if (room.players.length < 2) return
 
     const player = room.players.find((p) => p.id === ctx.playerId)
     if (!player) return
@@ -369,17 +418,18 @@ export class FifteenHub {
     }
 
     const now = Date.now()
+    const sum = room.players.reduce((s, p) => s + p.fingers, 0)
+
     if (room.freezeUntil > now) {
-      this.send(ws, { type: 'miss', call, sum: a.fingers + b.fingers, message: '得分間隔中，繼續變手指…' })
+      this.send(ws, { type: 'miss', call, sum, message: '得分間隔中，繼續變手指…' })
       return
     }
 
     if (player.callBlockedUntil > now) {
-      this.send(ws, { type: 'miss', call, sum: a.fingers + b.fingers, message: '稍等再叫' })
+      this.send(ws, { type: 'miss', call, sum, message: '稍等再叫' })
       return
     }
 
-    const sum = a.fingers + b.fingers
     if (sum !== call) {
       player.callBlockedUntil = now + MISS_BLOCK_MS
       this.send(ws, {
@@ -391,14 +441,17 @@ export class FifteenHub {
       return
     }
 
-    // First correct call wins the point
     player.score += 1
+    const parts = room.players.map((p) => p.fingers).join('+')
+    const fingers: Record<string, number> = {}
+    for (const p of room.players) fingers[p.id] = p.fingers
+
     const result: HitResult = {
       winnerId: player.id,
       call,
       sum,
-      fingers: { [a.id]: a.fingers, [b.id]: b.fingers },
-      text: `${player.name} 叫中 ${call}！（${a.fingers}+${b.fingers}）`,
+      fingers,
+      text: `${player.name} 叫中 ${call}！（${parts}）`,
       at: now,
     }
     room.lastHit = result
@@ -442,7 +495,7 @@ export class FifteenHub {
       player.callBlockedUntil = 0
     }
     room.updatedAt = Date.now()
-    room.log.push(makeLog('等待雙方重新準備…'))
+    room.log.push(makeLog('等待大家重新準備…'))
     this.broadcastRoom(room.code)
   }
 
@@ -463,9 +516,13 @@ export class FifteenHub {
     }
 
     if (room.phase === 'playing') {
-      room.phase = 'finished'
-      room.winnerId = room.players[0]?.id ?? null
-      room.log.push(makeLog('對手離線，對戰結束'))
+      if (room.players.length < 2) {
+        room.phase = 'finished'
+        room.winnerId = room.players[0]?.id ?? null
+        room.log.push(makeLog('人數不足，對戰結束'))
+      } else {
+        room.log.push(makeLog('有人離線，繼續對戰'))
+      }
     } else {
       room.phase = 'lobby'
       for (const p of room.players) {

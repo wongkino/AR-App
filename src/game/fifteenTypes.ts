@@ -1,5 +1,7 @@
 export type MatchFormat = 'bo3' | 'bo5'
 
+export type HandMode = 'one' | 'two'
+
 export type FifteenCall = 5 | 10 | 15 | 20
 
 export type RoomPhase = 'lobby' | 'playing' | 'finished'
@@ -33,7 +35,10 @@ export type PublicFifteenRoom = {
   players: PublicFifteenPlayer[]
   winnerId: string | null
   matchFormat: MatchFormat
+  handMode: HandMode
   winTarget: number
+  maxPlayers: number
+  fingersMax: number
   sum: number | null
   lastHit: HitResult | null
   freezeUntil: number
@@ -53,6 +58,11 @@ export const FIFTEEN_CALLS: FifteenCall[] = [5, 10, 15, 20]
 export const MATCH_FORMAT_LABELS: Record<MatchFormat, string> = {
   bo3: '先贏 2 分',
   bo5: '先贏 3 分',
+}
+
+export const HAND_MODE_LABELS: Record<HandMode, string> = {
+  one: '單手（每人最多 5）',
+  two: '雙手（每人最多 10）',
 }
 
 export function winTargetFor(format: MatchFormat): number {

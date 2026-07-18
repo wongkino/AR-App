@@ -13,6 +13,7 @@ type Props = {
   loadoutReady: boolean
   connected: boolean
   error: string | null
+  mediaReady: boolean
   onPlayerNameChange: (v: string) => void
   onRoomCodeInputChange: (v: string) => void
   onCreateRoom: () => void
@@ -32,6 +33,7 @@ export function RpsLobby({
   loadoutReady,
   connected,
   error,
+  mediaReady,
   onPlayerNameChange,
   onRoomCodeInputChange,
   onCreateRoom,
@@ -59,6 +61,7 @@ export function RpsLobby({
       {!room && (
         <section className="rps-card">
           <h2>加入對戰</h2>
+          {!mediaReady && <p className="rps-warn">請先撳上方開啟相機，再建立／加入房間。</p>}
           <label className="rps-field">
             <span>玩家名稱</span>
             <input
@@ -82,10 +85,10 @@ export function RpsLobby({
             />
           </label>
           <div className="rps-actions">
-            <button type="button" className="primary" disabled={!connected} onClick={onCreateRoom}>
+            <button type="button" className="primary" disabled={!connected || !mediaReady} onClick={onCreateRoom}>
               建立房間
             </button>
-            <button type="button" className="secondary" disabled={!connected} onClick={onJoinRoom}>
+            <button type="button" className="secondary" disabled={!connected || !mediaReady} onClick={onJoinRoom}>
               加入房間
             </button>
           </div>
@@ -162,7 +165,7 @@ export function RpsLobby({
               <button
                 type="button"
                 className="primary"
-                disabled={me?.ready || !loadoutReady}
+                disabled={me?.ready || !loadoutReady || !mediaReady}
                 onClick={onReady}
               >
                 {me?.ready ? '已準備' : '準備開打'}

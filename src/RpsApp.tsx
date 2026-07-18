@@ -153,18 +153,18 @@ export default function RpsApp() {
 
   const ensureCamera = useCallback(async () => {
     if (cameraOn) return
+    await unlockSfx()
     await startCamera()
     setCameraOn(true)
   }, [cameraOn, startCamera])
 
+  useEffect(() => () => stopCamera(), [stopCamera])
+
   useEffect(() => {
     if (room?.phase === 'playing') {
       matcherRef.current.clear()
-      void ensureCamera()
     }
-  }, [room?.phase, room?.round, ensureCamera])
-
-  useEffect(() => () => stopCamera(), [stopCamera])
+  }, [room?.phase, room?.round])
 
   const me = room?.players.find((p) => p.id === playerId) ?? null
   const opponent = room?.players.find((p) => p.id !== playerId) ?? null
@@ -173,6 +173,10 @@ export default function RpsApp() {
     const code = roomCodeInput.trim()
     if (!/^[A-Za-z0-9]{4}$/.test(code)) {
       setError('請輸入四位英數房間代碼')
+      return
+    }
+    if (!cameraOn) {
+      setError('請先開啟相機')
       return
     }
     setError(null)
@@ -186,6 +190,10 @@ export default function RpsApp() {
       setError('請輸入四位英數房間代碼')
       return
     }
+    if (!cameraOn) {
+      setError('請先開啟相機')
+      return
+    }
     setError(null)
     void unlockSfx()
     socketRef.current.join(code, playerName.trim() || '玩家')
@@ -194,6 +202,10 @@ export default function RpsApp() {
   const onReady = () => {
     if (!isRpsLoadoutComplete(loadout)) {
       setError('共用手勢配對尚未完成，請管理員到設定頁設定')
+      return
+    }
+    if (!cameraOn) {
+      setError('請先開啟相機')
       return
     }
     setError(null)
@@ -207,26 +219,19 @@ export default function RpsApp() {
         <div className="rps-viewport">
           {!cameraOn && (
             <div className="rps-camera-gate">
-              <h2>{ready ? '對戰需要相機' : '載入模型中…'}</h2>
-              <p>開打後會自動開啟相機。倒數結束後對住鏡頭做 {RPS_LABELS.rock}／{RPS_LABELS.scissors}／{RPS_LABELS.paper}。</p>
-              {room?.phase === 'playing' && (
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!ready}
-                  onClick={() => {
-                    void unlockSfx()
-                    void ensureCamera()
-                  }}
-                >
-                  開啟相機
-                </button>
-              )}
+              <h2>{ready ? '進入遊戲前請先開鏡頭' : '載入模型中…'}</h2>
+              <p>
+                開好相機再建立／加入房間，倒數開始時就唔使趕住授權。出招做{' '}
+                {RPS_LABELS.rock}／{RPS_LABELS.scissors}／{RPS_LABELS.paper}。
+              </p>
+              <button type="button" className="primary" disabled={!ready} onClick={() => void ensureCamera()}>
+                開啟相機
+              </button>
             </div>
           )}
           <video ref={videoRef} className="rps-cam" playsInline muted autoPlay disablePictureInPicture />
           <canvas ref={canvasRef} className="rps-overlay" />
-          {room?.phase === 'playing' && <div className="rps-live-badge">LIVE</div>}
+          {cameraOn && <div className="rps-live-badge">{room?.phase === 'playing' ? 'LIVE' : 'READY'}</div>}
         </div>
 
         {cameraError && <p className="rps-stage-note">{cameraError}</p>}
@@ -242,7 +247,7 @@ export default function RpsApp() {
           />
         )}
 
-        {room?.phase === 'playing' && (
+        {cameraOn && (
           <p className="rps-hand-hint">
             {handCount > 0 ? `偵測到 ${handCount} 隻手` : '請將手部放入鏡頭'}
           </p>
@@ -259,6 +264,7 @@ export default function RpsApp() {
         loadoutReady={loadoutReady}
         connected={connected}
         error={error}
+        mediaReady={cameraOn}
         onPlayerNameChange={setPlayerName}
         onRoomCodeInputChange={setRoomCodeInput}
         onCreateRoom={onCreateRoom}

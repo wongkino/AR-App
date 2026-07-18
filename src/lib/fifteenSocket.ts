@@ -1,4 +1,4 @@
-import type { FifteenCall, MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
+import type { FifteenCall, HandMode, MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
 
 type Handlers = {
   onOpen?: () => void
@@ -88,6 +88,10 @@ export class FifteenSocket {
 
   setFormat(format: MatchFormat): void {
     this.send({ type: 'set_format', format })
+  }
+
+  setHandMode(handMode: HandMode): void {
+    this.send({ type: 'set_hand_mode', handMode })
   }
 
   ready(): void {
