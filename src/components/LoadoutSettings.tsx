@@ -70,7 +70,7 @@ export function LoadoutSettings({
 
         <div className="loadout-settings-group">
           <h3>
-            包剪揼
+            👊✌️✋ 包剪揼
             <span className={`loadout-status${rpsComplete ? ' ok' : ''}`}>
               {rpsComplete ? '已完成' : '未完成'}
             </span>

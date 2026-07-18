@@ -88,9 +88,9 @@ export type PublicRpsRoom = {
 }
 
 const MOVE_LABELS: Record<RpsMove, string> = {
-  rock: '包',
-  scissors: '剪',
-  paper: '揼',
+  rock: '👊 包',
+  scissors: '✌️ 剪',
+  paper: '✋ 揼',
 }
 
 const DEFAULT_MATCH_FORMAT: MatchFormat = 'bo3'
@@ -431,7 +431,7 @@ export class RpsHub {
     room.countdown = null
     room.throwDeadline = Date.now() + THROW_MS
     room.updatedAt = Date.now()
-    room.log.push(makeLog('出招！對住鏡頭做包／剪／揼'))
+    room.log.push(makeLog('出招！對住鏡頭做 👊 包／✌️ 剪／✋ 揼'))
     this.broadcastRoom(roomCode)
 
     const timers = this.timers.get(roomCode) ?? {}

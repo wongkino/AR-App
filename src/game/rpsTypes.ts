@@ -53,9 +53,9 @@ export type ServerMessage =
   | { type: 'error'; message: string }
 
 export const RPS_LABELS: Record<RpsMove, string> = {
-  rock: '包',
-  scissors: '剪',
-  paper: '揼',
+  rock: '👊 包',
+  scissors: '✌️ 剪',
+  paper: '✋ 揼',
 }
 
 export const RPS_HINTS: Record<RpsMove, string> = {
@@ -65,7 +65,7 @@ export const RPS_HINTS: Record<RpsMove, string> = {
 }
 
 export const RPS_EMOJI: Record<RpsMove, string> = {
-  rock: '✊',
+  rock: '👊',
   scissors: '✌️',
   paper: '✋',
 }

@@ -156,7 +156,7 @@ export function RpsLobby({
                   <a className="rps-link" href="/">
                     設定
                   </a>{' '}
-                  為包／剪／揼各指定一個手勢。
+                  為 👊 包／✌️ 剪／✋ 揼各指定一個手勢。
                 </p>
               )}
               <button

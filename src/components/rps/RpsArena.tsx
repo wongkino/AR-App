@@ -1,5 +1,5 @@
 import type { PublicRpsPlayer, PublicRpsRoom, RpsMove } from '../../game/rpsTypes'
-import { RPS_EMOJI, RPS_LABELS } from '../../game/rpsTypes'
+import { RPS_LABELS } from '../../game/rpsTypes'
 
 type Props = {
   room: PublicRpsRoom
@@ -39,26 +39,24 @@ export function RpsArena({ room, me, opponent, playerId, countdown, flashMove }:
 
       {room.roundPhase === 'throwing' && (
         <div className="rps-throw-status">
-          {me?.locked ? '✓ 你已出招，等待對手…' : '對住鏡頭做 包／剪／揼'}
+          {me?.locked
+            ? '✓ 你已出招，等待對手…'
+            : `對住鏡頭做 ${RPS_LABELS.rock}／${RPS_LABELS.scissors}／${RPS_LABELS.paper}`}
         </div>
       )}
 
-      {flashMove && (
-        <div className="rps-move-flash">
-          {RPS_EMOJI[flashMove]} {RPS_LABELS[flashMove]}
-        </div>
-      )}
+      {flashMove && <div className="rps-move-flash">{RPS_LABELS[flashMove]}</div>}
 
       {showReveal && (
         <div className="rps-reveal">
           <div className="rps-reveal-card self">
             <span>{me?.name ?? '你'}</span>
-            <strong>{myMove ? `${RPS_EMOJI[myMove]} ${RPS_LABELS[myMove]}` : '—'}</strong>
+            <strong>{myMove ? RPS_LABELS[myMove] : '—'}</strong>
           </div>
           <div className="rps-reveal-vs">VS</div>
           <div className="rps-reveal-card foe">
             <span>{opponent?.name ?? '對手'}</span>
-            <strong>{foeMove ? `${RPS_EMOJI[foeMove]} ${RPS_LABELS[foeMove]}` : '—'}</strong>
+            <strong>{foeMove ? RPS_LABELS[foeMove] : '—'}</strong>
           </div>
           <p className="rps-reveal-text">{room.lastResult?.text}</p>
         </div>
