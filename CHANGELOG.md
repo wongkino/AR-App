@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.15] - 2026-07-18
+
+- Support multi-player fifteen-twenty and open media before match. (8d1af7a)
+
 ## [v0.6.14] - 2026-07-18
 
 - Make fifteen-twenty a real-time speed race. (9eb26c9)
