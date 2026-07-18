@@ -1,5 +1,5 @@
 # Unified image: frontend (Vite) + API (Hono) in one service
-FROM node:22-alpine AS web-build
+FROM node:24-alpine AS web-build
 WORKDIR /web
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -8,7 +8,7 @@ COPY public ./public
 COPY src ./src
 RUN npm run build
 
-FROM node:22-alpine AS api-build
+FROM node:24-alpine AS api-build
 WORKDIR /api
 COPY server/package.json server/package-lock.json ./
 RUN npm ci
@@ -16,7 +16,7 @@ COPY server/tsconfig.json ./
 COPY server/src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
