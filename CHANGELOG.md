@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.21] - 2026-07-18
+
+- Remove redundant RPS lobby loadout pairing panel. (07d0280)
+
 ## [v0.6.20] - 2026-07-18
 
 - Bump runtime to Node.js 24 across Docker, CI, and engines. (6efa9dd)
