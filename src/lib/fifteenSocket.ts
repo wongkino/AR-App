@@ -1,4 +1,11 @@
-import type { FifteenCall, HandMode, MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
+import type {
+  FifteenCall,
+  HandMode,
+  MatchFormat,
+  PublicFifteenRoom,
+  RtcSignalPayload,
+  ServerMessage,
+} from '../game/fifteenTypes'
 
 type Handlers = {
   onOpen?: () => void
@@ -6,6 +13,7 @@ type Handlers = {
   onRoomUpdate?: (room: PublicFifteenRoom) => void
   onHit?: (payload: Extract<ServerMessage, { type: 'hit' }>) => void
   onMiss?: (payload: Extract<ServerMessage, { type: 'miss' }>) => void
+  onRtcSignal?: (from: string, payload: RtcSignalPayload) => void
   onError?: (message: string) => void
   onClose?: () => void
 }
@@ -53,6 +61,9 @@ export class FifteenSocket {
           break
         case 'miss':
           handlers.onMiss?.(msg)
+          break
+        case 'rtc_signal':
+          handlers.onRtcSignal?.(msg.from, msg.payload as RtcSignalPayload)
           break
         case 'error':
           handlers.onError?.(msg.message)
@@ -104,6 +115,10 @@ export class FifteenSocket {
 
   call(call: FifteenCall): void {
     this.send({ type: 'call', call })
+  }
+
+  rtcSignal(to: string, payload: RtcSignalPayload): void {
+    this.send({ type: 'rtc_signal', to, payload }, { silent: true })
   }
 
   rematch(): void {

@@ -5,8 +5,9 @@ import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { countFingers } from './lib/fingerCount'
 import { FifteenSocket } from './lib/fifteenSocket'
 import { FifteenSpeechListener, speechRecognitionSupported } from './lib/fifteenSpeech'
+import { FifteenVoiceMesh } from './lib/fifteenVoice'
 import { playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
-import type { FifteenCall, HandMode, PublicFifteenRoom } from './game/fifteenTypes'
+import type { FifteenCall, HandMode, PublicFifteenRoom, RtcSignalPayload } from './game/fifteenTypes'
 import type { HandFrame } from './types'
 import './FifteenApp.css'
 
@@ -18,6 +19,8 @@ export default function FifteenApp() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
+  const [micOn, setMicOn] = useState(false)
+  const [micMuted, setMicMuted] = useState(false)
   const [speechArmed, setSpeechArmed] = useState(false)
   const [liveFingers, setLiveFingers] = useState(0)
   const [missMessage, setMissMessage] = useState<string | null>(null)
@@ -26,6 +29,7 @@ export default function FifteenApp() {
 
   const socketRef = useRef(new FifteenSocket())
   const speechRef = useRef(new FifteenSpeechListener())
+  const voiceRef = useRef(new FifteenVoiceMesh())
   const roomRef = useRef(room)
   const playerIdRef = useRef(playerId)
   const handModeRef = useRef<HandMode>('one')
@@ -41,6 +45,12 @@ export default function FifteenApp() {
   useEffect(() => {
     playerIdRef.current = playerId
   }, [playerId])
+
+  const syncVoice = useCallback(async (nextRoom: PublicFifteenRoom | null, id: string | null) => {
+    if (!nextRoom || !id || !micOn) return
+    voiceRef.current.bind(id, (to, payload) => socketRef.current.rtcSignal(to, payload))
+    await voiceRef.current.syncPeers(nextRoom.players.map((p) => p.id))
+  }, [micOn])
 
   const flashMiss = useCallback((message: string) => {
     setMissMessage(message)
@@ -72,10 +82,12 @@ export default function FifteenApp() {
         setRoom(nextRoom)
         setPlayerId(id)
         setError(null)
+        void syncVoice(nextRoom, id)
       },
       onRoomUpdate: (nextRoom) => {
         setRoom(nextRoom)
         setError(null)
+        void syncVoice(nextRoom, playerIdRef.current)
       },
       onHit: (payload) => {
         setRoom(payload.room)
@@ -93,16 +105,24 @@ export default function FifteenApp() {
       onMiss: (payload) => {
         flashMiss(payload.message)
       },
+      onRtcSignal: (from, payload) => {
+        void voiceRef.current.handleSignal(from, payload as RtcSignalPayload)
+      },
       onError: (message) => setError(message),
       onClose: () => setConnected(false),
     })
 
     return () => {
       speechRef.current.stop()
+      voiceRef.current.dispose()
       socket.disconnect()
       if (missTimer.current) window.clearTimeout(missTimer.current)
     }
-  }, [flashMiss])
+  }, [flashMiss, syncVoice])
+
+  useEffect(() => {
+    void syncVoice(room, playerId)
+  }, [micOn, room, playerId, syncVoice])
 
   // Keep speech warm once armed; only score calls during playing
   useEffect(() => {
@@ -143,7 +163,15 @@ export default function FifteenApp() {
     await unlockSfx()
     await startCamera()
     setCameraOn(true)
-    if (speechOk) setSpeechArmed(true)
+    const micOk = await voiceRef.current.ensureMic()
+    setMicOn(micOk)
+    if (!micOk) {
+      setError('未能開啟麥克風；仍可玩，但聽唔到／傳唔到對方叫聲')
+    }
+    // Delay speech so Safari does not abort video.play() / camera start.
+    if (speechOk) {
+      window.setTimeout(() => setSpeechArmed(true), 400)
+    }
   }, [speechOk, startCamera])
 
   useEffect(() => () => stopCamera(), [stopCamera])
@@ -207,6 +235,12 @@ export default function FifteenApp() {
     socketRef.current.ready()
   }
 
+  const onToggleMute = () => {
+    const next = !micMuted
+    setMicMuted(next)
+    voiceRef.current.setMuted(next)
+  }
+
   return (
     <div className="fifteen-app">
       <div className="fifteen-stage">
@@ -215,11 +249,10 @@ export default function FifteenApp() {
             <div className="fifteen-camera-gate">
               <h2>{ready ? '進入遊戲前請先開鏡頭' : '載入模型中…'}</h2>
               <p>
-                開好相機{speechOk ? '與語音' : ''} 再建立／加入房間，開打就唔使趕住授權。
-                多人可選單手或雙手，持續變手指鬥快叫中總和。
+                開好相機、麥克風{speechOk ? '與叫數語音' : ''} 再入房。房間內可用即時語音聽到對方叫數。
               </p>
               <button type="button" className="primary" disabled={!ready} onClick={() => void openMedia()}>
-                {speechOk ? '開啟相機與語音' : '開啟相機'}
+                開啟相機與麥克風
               </button>
             </div>
           )}
@@ -247,6 +280,7 @@ export default function FifteenApp() {
             {handCount > 0
               ? `偵測到 ${handCount} 隻手 · 指數 ${liveFingers}${room ? `／${room.fingersMax}` : ''}`
               : '請將手部放入鏡頭'}
+            {micOn ? (micMuted ? ' · 咪高峰已靜音' : ' · 語音通話開啟中') : ' · 無麥克風'}
           </p>
         )}
       </div>
@@ -260,11 +294,14 @@ export default function FifteenApp() {
         error={error}
         speechOk={speechOk}
         mediaReady={cameraOn}
+        micOn={micOn}
+        micMuted={micMuted}
         onPlayerNameChange={setPlayerName}
         onRoomCodeInputChange={setRoomCodeInput}
         onCreateRoom={onCreateRoom}
         onJoinRoom={onJoinRoom}
         onReady={onReady}
+        onToggleMute={onToggleMute}
         onRematch={() => {
           void unlockSfx()
           socketRef.current.rematch()

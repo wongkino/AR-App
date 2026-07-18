@@ -266,11 +266,31 @@ export function useHandLandmarker(
       video.setAttribute('webkit-playsinline', 'true')
       video.muted = true
       video.srcObject = stream
-      await video.play()
+      try {
+        await video.play()
+      } catch (playErr) {
+        // iOS / Safari often aborts play() when a second call races or when
+        // mic/speech starts right after — camera is usually still fine.
+        const name = playErr instanceof DOMException ? playErr.name : ''
+        const msg = playErr instanceof Error ? playErr.message : ''
+        if (name !== 'AbortError' && !/aborted/i.test(msg)) throw playErr
+      }
       runningRef.current = true
       cancelAnimationFrame(rafRef.current)
       rafRef.current = requestAnimationFrame(() => loopRef.current())
     } catch (err) {
+      const name = err instanceof DOMException ? err.name : ''
+      const msg = err instanceof Error ? err.message : ''
+      if (name === 'AbortError' || /aborted/i.test(msg)) {
+        // Benign interrupt; retry play once if we already have a stream.
+        if (streamRef.current && videoRef.current) {
+          void videoRef.current.play().catch(() => undefined)
+          runningRef.current = true
+          cancelAnimationFrame(rafRef.current)
+          rafRef.current = requestAnimationFrame(() => loopRef.current())
+          return
+        }
+      }
       setError(
         err instanceof Error
           ? err.message

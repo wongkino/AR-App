@@ -49,6 +49,7 @@ export type ClientMessage =
   | { type: 'ready' }
   | { type: 'fingers'; count: number }
   | { type: 'call'; call: FifteenCall }
+  | { type: 'rtc_signal'; to: string; payload: unknown }
   | { type: 'leave' }
   | { type: 'rematch' }
 
@@ -82,6 +83,7 @@ export type ServerMessage =
   | { type: 'room_update'; room: PublicFifteenRoom }
   | { type: 'hit'; result: HitResult; room: PublicFifteenRoom }
   | { type: 'miss'; call: FifteenCall; sum: number; message: string }
+  | { type: 'rtc_signal'; from: string; payload: unknown }
   | { type: 'error'; message: string }
 
 const DEFAULT_MATCH_FORMAT: MatchFormat = 'bo3'
@@ -221,6 +223,9 @@ export class FifteenHub {
         break
       case 'call':
         this.handleCall(ws, msg.call)
+        break
+      case 'rtc_signal':
+        this.handleRtcSignal(ws, msg.to, msg.payload)
         break
       case 'leave':
         this.handleLeave(ws)
@@ -468,6 +473,23 @@ export class FifteenHub {
 
     this.broadcastHit(room.code, result)
     this.broadcastRoom(room.code)
+  }
+
+  private handleRtcSignal(ws: WSContext, to: string, payload: unknown): void {
+    const ctx = this.requireConnection(ws)
+    if (!ctx) return
+    if (!to || typeof to !== 'string') return
+
+    const target = [...this.connections.values()].find(
+      (c) => c.roomCode === ctx.roomCode && c.playerId === to,
+    )
+    if (!target) return
+
+    this.send(target.ws, {
+      type: 'rtc_signal',
+      from: ctx.playerId,
+      payload,
+    })
   }
 
   private handleLeave(ws: WSContext): void {

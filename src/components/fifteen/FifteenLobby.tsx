@@ -10,11 +10,14 @@ type Props = {
   error: string | null
   speechOk: boolean
   mediaReady: boolean
+  micOn: boolean
+  micMuted: boolean
   onPlayerNameChange: (v: string) => void
   onRoomCodeInputChange: (v: string) => void
   onCreateRoom: () => void
   onJoinRoom: () => void
   onReady: () => void
+  onToggleMute: () => void
   onRematch: () => void
   onFormatChange: (format: MatchFormat) => void
   onHandModeChange: (mode: HandMode) => void
@@ -29,11 +32,14 @@ export function FifteenLobby({
   error,
   speechOk,
   mediaReady,
+  micOn,
+  micMuted,
   onPlayerNameChange,
   onRoomCodeInputChange,
   onCreateRoom,
   onJoinRoom,
   onReady,
+  onToggleMute,
   onRematch,
   onFormatChange,
   onHandModeChange,
@@ -60,10 +66,11 @@ export function FifteenLobby({
           <h2>加入對戰</h2>
           <p className="fifteen-muted">
             最多 {maxPlayers} 人。房主可選單手／雙手；持續變手指，先叫中全員總和（5／10／15／20）得分。
-            {!speechOk && '（此裝置語音不可用，可用按鈕叫數）'}
+            房間內會即時語音，可聽到對方叫數。
+            {!speechOk && '（此裝置語音辨識不可用，可用按鈕叫數）'}
           </p>
           {!mediaReady && (
-            <p className="fifteen-warn">請先撳上方開啟相機{speechOk ? '與語音' : ''}，再建立／加入房間。</p>
+            <p className="fifteen-warn">請先撳上方開啟相機與麥克風，再建立／加入房間。</p>
           )}
           <label className="fifteen-field">
             <span>玩家名稱</span>
@@ -118,6 +125,12 @@ export function FifteenLobby({
               {room.phase === 'playing' && '對戰進行中 · 鬥快叫中總和'}
               {room.phase === 'finished' && '本場結束'}
             </p>
+            {micOn && (
+              <button type="button" className="secondary fifteen-mute-btn" onClick={onToggleMute}>
+                {micMuted ? '解除靜音（對方聽唔到你）' : '靜音咪高峰'}
+              </button>
+            )}
+            {!micOn && <p className="fifteen-warn">無麥克風：聽／傳對方叫聲唔可用</p>}
           </section>
 
           <section className="fifteen-card">

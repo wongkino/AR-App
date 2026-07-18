@@ -399,6 +399,10 @@
   font-size: 0.9rem;
 }
 
+.fifteen-mute-btn {
+  margin-top: 0.65rem;
+}
+
 .fifteen-score-card {
   padding: 0.75rem;
   border-radius: 12px;

@@ -110,6 +110,8 @@ export class FifteenSpeechListener {
     }
 
     rec.onerror = (event) => {
+      // aborted / no-speech are normal when we restart or user pauses
+      if (event.error === 'aborted' || event.error === 'no-speech') return
       if (event.error === 'language-not-supported' && this.langIndex < this.langs.length - 1) {
         this.langIndex += 1
         try {

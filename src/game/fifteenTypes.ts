@@ -51,7 +51,13 @@ export type ServerMessage =
   | { type: 'room_update'; room: PublicFifteenRoom }
   | { type: 'hit'; result: HitResult; room: PublicFifteenRoom }
   | { type: 'miss'; call: FifteenCall; sum: number; message: string }
+  | { type: 'rtc_signal'; from: string; payload: unknown }
   | { type: 'error'; message: string }
+
+export type RtcSignalPayload =
+  | { kind: 'offer'; sdp: RTCSessionDescriptionInit }
+  | { kind: 'answer'; sdp: RTCSessionDescriptionInit }
+  | { kind: 'ice'; candidate: RTCIceCandidateInit | null }
 
 export const FIFTEEN_CALLS: FifteenCall[] = [5, 10, 15, 20]
 
