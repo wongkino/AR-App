@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.24] - 2026-07-18
+
+- Show live RPS move (包/剪/揼) under the camera hint. (434d00f)
+
 ## [v0.6.23] - 2026-07-18
 
 - Upgrade Docker GitHub Actions to Node 24-compatible majors. (83ba351)
