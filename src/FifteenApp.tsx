@@ -5,7 +5,7 @@ import { useHandLandmarker } from './hooks/useHandLandmarker'
 import { countFingers } from './lib/fingerCount'
 import { FifteenSocket } from './lib/fifteenSocket'
 import { FifteenSpeechListener, speechRecognitionSupported } from './lib/fifteenSpeech'
-import { playCountdownTick, playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
+import { playDraw, playLose, playWin, unlockSfx } from './lib/sfx'
 import type { FifteenCall, PublicFifteenRoom } from './game/fifteenTypes'
 import type { HandFrame } from './types'
 import './FifteenApp.css'
@@ -18,20 +18,18 @@ export default function FifteenApp() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [cameraOn, setCameraOn] = useState(false)
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const [liveCall, setLiveCall] = useState<FifteenCall | null>(null)
   const [liveFingers, setLiveFingers] = useState(0)
+  const [missMessage, setMissMessage] = useState<string | null>(null)
   const [speechOk] = useState(() => speechRecognitionSupported())
+  const [now, setNow] = useState(() => Date.now())
 
   const socketRef = useRef(new FifteenSocket())
   const speechRef = useRef(new FifteenSpeechListener())
   const roomRef = useRef(room)
   const playerIdRef = useRef(playerId)
-  const liveCallRef = useRef(liveCall)
-  const liveFingersRef = useRef(liveFingers)
-  const lockedSentRef = useRef(false)
-  const callAtRef = useRef<number | null>(null)
-  const stableFingersRef = useRef<{ value: number; since: number } | null>(null)
+  const lastSentFingers = useRef<number | null>(null)
+  const missTimer = useRef<number | null>(null)
+  const callBusyRef = useRef(false)
 
   useEffect(() => {
     roomRef.current = room
@@ -41,31 +39,23 @@ export default function FifteenApp() {
     playerIdRef.current = playerId
   }, [playerId])
 
-  useEffect(() => {
-    liveCallRef.current = liveCall
-  }, [liveCall])
-
-  useEffect(() => {
-    liveFingersRef.current = liveFingers
-  }, [liveFingers])
-
-  const sendLock = useCallback((call: FifteenCall, fingers: number) => {
-    const currentRoom = roomRef.current
-    if (!currentRoom || currentRoom.phase !== 'playing' || currentRoom.roundPhase !== 'throwing') {
-      return
-    }
-    const me = currentRoom.players.find((p) => p.id === playerIdRef.current)
-    if (me?.locked || lockedSentRef.current) return
-
-    lockedSentRef.current = true
-    socketRef.current.lock(call, fingers)
-    speechRef.current.stop()
+  const flashMiss = useCallback((message: string) => {
+    setMissMessage(message)
+    if (missTimer.current) window.clearTimeout(missTimer.current)
+    missTimer.current = window.setTimeout(() => setMissMessage(null), 1200)
   }, [])
 
-  const setCall = useCallback((call: FifteenCall) => {
-    setLiveCall(call)
-    liveCallRef.current = call
-    callAtRef.current = Date.now()
+  const sendCall = useCallback((call: FifteenCall) => {
+    const currentRoom = roomRef.current
+    if (!currentRoom || currentRoom.phase !== 'playing') return
+    if (currentRoom.freezeUntil > Date.now()) return
+    if (callBusyRef.current) return
+    callBusyRef.current = true
+    window.setTimeout(() => {
+      callBusyRef.current = false
+    }, 280)
+    void unlockSfx()
+    socketRef.current.call(call)
   }, [])
 
   useEffect(() => {
@@ -83,106 +73,61 @@ export default function FifteenApp() {
       onRoomUpdate: (nextRoom) => {
         setRoom(nextRoom)
         setError(null)
-        if (nextRoom.roundPhase !== 'countdown') {
-          setCountdown(null)
-        }
-        if (nextRoom.roundPhase !== 'throwing') {
-          lockedSentRef.current = false
-          callAtRef.current = null
-          stableFingersRef.current = null
-        }
       },
-      onRoundTick: (value) => {
-        setCountdown(value)
-        playCountdownTick(value)
-      },
-      onRoundResult: (payload) => {
+      onHit: (payload) => {
         setRoom(payload.room)
-        speechRef.current.stop()
-        const { result, room: nextRoom } = payload
+        setMissMessage(null)
         const meId = playerIdRef.current
         if (!meId) return
-        if (result.winnerId === 'draw' || result.winnerId === null) {
-          playDraw()
-        } else if (result.winnerId === meId || nextRoom.winnerId === meId) {
+        if (payload.result.winnerId === meId) {
           playWin()
-        } else {
+        } else if (payload.room.winnerId && payload.room.winnerId !== meId) {
           playLose()
+        } else {
+          playDraw()
         }
       },
-      onError: (message) => {
-        lockedSentRef.current = false
-        setError(message)
+      onMiss: (payload) => {
+        flashMiss(payload.message)
       },
+      onError: (message) => setError(message),
       onClose: () => setConnected(false),
     })
 
     return () => {
       speechRef.current.stop()
       socket.disconnect()
+      if (missTimer.current) window.clearTimeout(missTimer.current)
     }
-  }, [])
+  }, [flashMiss])
 
-  // Start / stop speech during throwing
+  // Speech while playing (not frozen)
   useEffect(() => {
-    if (room?.phase !== 'playing' || room.roundPhase !== 'throwing') {
-      speechRef.current.stop()
-      if (room?.roundPhase !== 'throwing') {
-        setLiveCall(null)
-        lockedSentRef.current = false
-        callAtRef.current = null
-        stableFingersRef.current = null
-      }
-      return
-    }
-
-    const me = room.players.find((p) => p.id === playerId)
-    if (me?.locked) {
+    const frozen = Boolean(room?.freezeUntil && room.freezeUntil > Date.now())
+    if (room?.phase !== 'playing' || frozen) {
       speechRef.current.stop()
       return
     }
 
     void unlockSfx()
     speechRef.current.start((call) => {
-      setCall(call)
+      sendCall(call)
     })
 
     return () => speechRef.current.stop()
-  }, [room?.phase, room?.roundPhase, room?.round, room?.players, playerId, setCall])
+  }, [room?.phase, room?.freezeUntil, room?.lastHit?.at, now, sendCall])
 
-  const onFrame = useCallback(
-    (frame: HandFrame | null) => {
-      const fingers = countFingers(frame)
-      setLiveFingers(fingers)
+  const onFrame = useCallback((frame: HandFrame | null) => {
+    const fingers = countFingers(frame)
+    setLiveFingers(fingers)
 
-      const currentRoom = roomRef.current
-      if (!currentRoom || currentRoom.phase !== 'playing' || currentRoom.roundPhase !== 'throwing') {
-        return
-      }
-      const me = currentRoom.players.find((p) => p.id === playerIdRef.current)
-      if (me?.locked || lockedSentRef.current) return
+    const currentRoom = roomRef.current
+    if (!currentRoom || currentRoom.phase !== 'playing') return
 
-      const now = Date.now()
-      const prev = stableFingersRef.current
-      if (!prev || prev.value !== fingers) {
-        stableFingersRef.current = { value: fingers, since: now }
-      }
-
-      const call = liveCallRef.current
-      if (call == null || callAtRef.current == null) return
-
-      const stable = stableFingersRef.current
-      const fingersStable = stable != null && now - stable.since >= 350
-      const callHeld = now - callAtRef.current >= 450
-      const deadline = currentRoom.throwDeadline
-      const nearEnd = deadline != null && deadline - now <= 500
-
-      if ((fingersStable && callHeld) || nearEnd) {
-        sendLock(call, fingers)
-      }
-    },
-    [sendLock],
-  )
+    if (lastSentFingers.current === fingers) return
+    lastSentFingers.current = fingers
+    socketRef.current.fingers(fingers)
+  }, [])
 
   const { videoRef, canvasRef, ready, error: cameraError, handCount, startCamera, stopCamera } =
     useHandLandmarker(onFrame)
@@ -195,31 +140,24 @@ export default function FifteenApp() {
 
   useEffect(() => {
     if (room?.phase === 'playing') {
+      lastSentFingers.current = null
       void ensureCamera()
     }
-  }, [room?.phase, room?.round, ensureCamera])
+  }, [room?.phase, ensureCamera])
 
   useEffect(() => () => stopCamera(), [stopCamera])
 
-  // Fallback lock near deadline even if camera frames stall
   useEffect(() => {
-    if (room?.phase !== 'playing' || room.roundPhase !== 'throwing') return
-
-    const id = window.setInterval(() => {
-      const currentRoom = roomRef.current
-      if (!currentRoom || currentRoom.roundPhase !== 'throwing') return
-      const me = currentRoom.players.find((p) => p.id === playerIdRef.current)
-      if (me?.locked || lockedSentRef.current) return
-      const call = liveCallRef.current
-      if (call == null) return
-      const deadline = currentRoom.throwDeadline
-      if (deadline != null && deadline - Date.now() <= 500) {
-        sendLock(call, liveFingersRef.current)
-      }
-    }, 200)
-
+    if (room?.phase !== 'playing' || !room.freezeUntil) return
+    if (room.freezeUntil <= Date.now()) return
+    const id = window.setInterval(() => setNow(Date.now()), 200)
     return () => window.clearInterval(id)
-  }, [room?.phase, room?.roundPhase, room?.round, sendLock])
+  }, [room?.phase, room?.freezeUntil])
+
+  const roomForArena =
+    room && room.phase === 'playing'
+      ? { ...room, frozen: room.freezeUntil > now }
+      : room
 
   const me = room?.players.find((p) => p.id === playerId) ?? null
   const opponent = room?.players.find((p) => p.id !== playerId) ?? null
@@ -252,11 +190,6 @@ export default function FifteenApp() {
     socketRef.current.ready()
   }
 
-  const onPickCall = (call: FifteenCall) => {
-    void unlockSfx()
-    setCall(call)
-  }
-
   return (
     <div className="fifteen-app">
       <div className="fifteen-stage">
@@ -264,7 +197,7 @@ export default function FifteenApp() {
           {!cameraOn && (
             <div className="fifteen-camera-gate">
               <h2>{ready ? '對戰需要相機' : '載入模型中…'}</h2>
-              <p>開打後會自動開啟相機。倒數結束後伸手指並叫數（5／10／15／20）。</p>
+              <p>開打後持續伸手指變體，睇準雙方總和就叫 5／10／15／20，鬥快叫中得分。</p>
               {room?.phase === 'playing' && (
                 <button
                   type="button"
@@ -287,23 +220,22 @@ export default function FifteenApp() {
 
         {cameraError && <p className="fifteen-stage-note">{cameraError}</p>}
 
-        {room?.phase === 'playing' && (
+        {roomForArena?.phase === 'playing' && (
           <FifteenArena
-            room={room}
+            room={roomForArena}
             me={me}
             opponent={opponent}
             playerId={playerId}
-            countdown={countdown}
-            liveCall={liveCall}
             liveFingers={liveFingers}
+            missMessage={missMessage}
             speechOk={speechOk}
-            onPickCall={onPickCall}
+            onPickCall={sendCall}
           />
         )}
 
         {room?.phase === 'playing' && (
           <p className="fifteen-hand-hint">
-            {handCount > 0 ? `偵測到 ${handCount} 隻手 · 指數 ${liveFingers}` : '請將手部放入鏡頭'}
+            {handCount > 0 ? `偵測到 ${handCount} 隻手 · 你的指數 ${liveFingers}` : '請將手部放入鏡頭'}
           </p>
         )}
       </div>

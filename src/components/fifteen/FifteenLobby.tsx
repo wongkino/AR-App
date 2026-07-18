@@ -54,8 +54,8 @@ export function FifteenLobby({
         <section className="fifteen-card">
           <h2>加入對戰</h2>
           <p className="fifteen-muted">
-            語音叫 5／10／15／20，雙手伸手指；總和等於自己叫的數就贏。
-            {!speechOk && '（此裝置語音不可用，出招時可用按鈕叫數）'}
+            即時變手指（張開＝5、拳頭＝0，每人最多 10），先叫中雙方總和（5／10／15／20）得分。
+            {!speechOk && '（此裝置語音不可用，可用按鈕叫數）'}
           </p>
           <label className="fifteen-field">
             <span>玩家名稱</span>
@@ -146,7 +146,7 @@ export function FifteenLobby({
           {room.phase === 'lobby' && (
             <section className="fifteen-card">
               <h2>準備</h2>
-              <p className="fifteen-muted">無需手勢庫配對。開打後用語音叫數＋伸手指。</p>
+              <p className="fifteen-muted">無需手勢庫配對。開打後持續變手指、鬥快叫中總和。</p>
               <button type="button" className="primary" disabled={me?.ready} onClick={onReady}>
                 {me?.ready ? '已準備' : '準備開打'}
               </button>

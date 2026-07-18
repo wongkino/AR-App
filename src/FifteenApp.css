@@ -134,7 +134,7 @@
 
 .fifteen-live-stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0.5rem;
 }
 
@@ -145,6 +145,22 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+}
+
+.fifteen-sum-stat {
+  outline: 1px solid rgba(15, 118, 110, 0.35);
+}
+
+.fifteen-throw-status.hit {
+  color: var(--ok);
+}
+
+.fifteen-miss {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--warn);
+  font-size: 0.95rem;
 }
 
 .fifteen-live-stats span {

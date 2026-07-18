@@ -1,12 +1,11 @@
-import type { MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
-import type { FifteenCall } from '../game/fifteenTypes'
+import type { FifteenCall, MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
 
 type Handlers = {
   onOpen?: () => void
   onJoined?: (room: PublicFifteenRoom, playerId: string) => void
   onRoomUpdate?: (room: PublicFifteenRoom) => void
-  onRoundTick?: (countdown: number) => void
-  onRoundResult?: (payload: Extract<ServerMessage, { type: 'round_result' }>) => void
+  onHit?: (payload: Extract<ServerMessage, { type: 'hit' }>) => void
+  onMiss?: (payload: Extract<ServerMessage, { type: 'miss' }>) => void
   onError?: (message: string) => void
   onClose?: () => void
 }
@@ -49,11 +48,11 @@ export class FifteenSocket {
         case 'room_update':
           handlers.onRoomUpdate?.(msg.room)
           break
-        case 'round_tick':
-          handlers.onRoundTick?.(msg.countdown)
+        case 'hit':
+          handlers.onHit?.(msg)
           break
-        case 'round_result':
-          handlers.onRoundResult?.(msg)
+        case 'miss':
+          handlers.onMiss?.(msg)
           break
         case 'error':
           handlers.onError?.(msg.message)
@@ -95,8 +94,12 @@ export class FifteenSocket {
     this.send({ type: 'ready' })
   }
 
-  lock(call: FifteenCall, fingers: number): void {
-    this.send({ type: 'lock', call, fingers })
+  fingers(count: number): void {
+    this.send({ type: 'fingers', count }, { silent: true })
+  }
+
+  call(call: FifteenCall): void {
+    this.send({ type: 'call', call })
   }
 
   rematch(): void {

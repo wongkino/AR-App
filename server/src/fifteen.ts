@@ -1,25 +1,16 @@
 import type { WSContext } from 'hono/ws'
 
 export type MatchFormat = 'bo3' | 'bo5'
-
 export type FifteenCall = 5 | 10 | 15 | 20
-
-export type RoundPhase = 'countdown' | 'throwing' | 'reveal' | 'between'
-
 export type RoomPhase = 'lobby' | 'playing' | 'finished'
 
-export type PlayerLock = {
+export type HitResult = {
+  winnerId: string
   call: FifteenCall
-  fingers: number
-}
-
-export type RoundResult = {
-  round: number
-  calls: Record<string, FifteenCall | null>
-  fingers: Record<string, number | null>
-  sum: number | null
-  winnerId: string | 'draw' | null
+  sum: number
+  fingers: Record<string, number>
   text: string
+  at: number
 }
 
 export type FifteenLogEntry = {
@@ -33,7 +24,9 @@ export type FifteenPlayerState = {
   name: string
   ready: boolean
   score: number
-  locked: PlayerLock | null
+  fingers: number
+  /** Ignore calls until this timestamp (miss spam / post-hit). */
+  callBlockedUntil: number
 }
 
 export type FifteenRoomState = {
@@ -42,11 +35,9 @@ export type FifteenRoomState = {
   players: FifteenPlayerState[]
   winnerId: string | null
   matchFormat: MatchFormat
-  round: number
-  roundPhase: RoundPhase | null
-  countdown: number | null
-  throwDeadline: number | null
-  lastResult: RoundResult | null
+  lastHit: HitResult | null
+  /** Global freeze after a hit — fingers still update, calls ignored. */
+  freezeUntil: number
   log: FifteenLogEntry[]
   updatedAt: number
 }
@@ -55,7 +46,8 @@ export type ClientMessage =
   | { type: 'join'; roomCode: string; playerName: string; create?: boolean }
   | { type: 'set_format'; format: MatchFormat }
   | { type: 'ready' }
-  | { type: 'lock'; call: FifteenCall; fingers: number }
+  | { type: 'fingers'; count: number }
+  | { type: 'call'; call: FifteenCall }
   | { type: 'leave' }
   | { type: 'rematch' }
 
@@ -64,7 +56,7 @@ export type PublicFifteenPlayer = {
   name: string
   ready: boolean
   score: number
-  locked: boolean
+  fingers: number
 }
 
 export type PublicFifteenRoom = {
@@ -74,27 +66,24 @@ export type PublicFifteenRoom = {
   winnerId: string | null
   matchFormat: MatchFormat
   winTarget: number
-  round: number
-  roundPhase: RoundPhase | null
-  countdown: number | null
-  throwDeadline: number | null
-  lastResult: RoundResult | null
+  sum: number | null
+  lastHit: HitResult | null
+  freezeUntil: number
+  frozen: boolean
   log: FifteenLogEntry[]
 }
 
 export type ServerMessage =
   | { type: 'joined'; room: PublicFifteenRoom; playerId: string }
   | { type: 'room_update'; room: PublicFifteenRoom }
-  | { type: 'round_tick'; countdown: number }
-  | { type: 'round_result'; result: RoundResult; room: PublicFifteenRoom }
+  | { type: 'hit'; result: HitResult; room: PublicFifteenRoom }
+  | { type: 'miss'; call: FifteenCall; sum: number; message: string }
   | { type: 'error'; message: string }
 
 const DEFAULT_MATCH_FORMAT: MatchFormat = 'bo3'
-const COUNTDOWN_SEC = 3
-const THROW_MS = 6000
-const REVEAL_MS = 3200
-const BETWEEN_MS = 1200
 const ROOM_TTL_MS = 30 * 60 * 1000
+const HIT_FREEZE_MS = 1400
+const MISS_BLOCK_MS = 700
 const VALID_CALLS = new Set<FifteenCall>([5, 10, 15, 20])
 
 type Connection = {
@@ -103,19 +92,12 @@ type Connection = {
   ws: WSContext
 }
 
-type RoomTimers = {
-  countdown?: ReturnType<typeof setTimeout>
-  throw?: ReturnType<typeof setTimeout>
-  reveal?: ReturnType<typeof setTimeout>
-  between?: ReturnType<typeof setTimeout>
-}
-
 function winTargetFor(format: MatchFormat): number {
   return format === 'bo3' ? 2 : 3
 }
 
 function formatLabel(format: MatchFormat): string {
-  return format === 'bo3' ? '三盤兩勝' : '五盤三勝'
+  return format === 'bo3' ? '先贏 2 分' : '先贏 3 分'
 }
 
 function createPlayer(name: string): FifteenPlayerState {
@@ -124,7 +106,8 @@ function createPlayer(name: string): FifteenPlayerState {
     name: name.slice(0, 16) || '玩家',
     ready: false,
     score: 0,
-    locked: null,
+    fingers: 0,
+    callBlockedUntil: 0,
   }
 }
 
@@ -155,11 +138,17 @@ function toPublicPlayer(player: FifteenPlayerState): PublicFifteenPlayer {
     name: player.name,
     ready: player.ready,
     score: player.score,
-    locked: player.locked !== null,
+    fingers: player.fingers,
   }
 }
 
+function liveSum(room: FifteenRoomState): number | null {
+  if (room.phase !== 'playing' || room.players.length < 2) return null
+  return room.players[0].fingers + room.players[1].fingers
+}
+
 function toPublicRoom(room: FifteenRoomState): PublicFifteenRoom {
+  const now = Date.now()
   return {
     code: room.code,
     phase: room.phase,
@@ -167,23 +156,17 @@ function toPublicRoom(room: FifteenRoomState): PublicFifteenRoom {
     winnerId: room.winnerId,
     matchFormat: room.matchFormat,
     winTarget: winTargetFor(room.matchFormat),
-    round: room.round,
-    roundPhase: room.roundPhase,
-    countdown: room.countdown,
-    throwDeadline: room.throwDeadline,
-    lastResult: room.lastResult,
+    sum: liveSum(room),
+    lastHit: room.lastHit,
+    freezeUntil: room.freezeUntil,
+    frozen: room.phase === 'playing' && room.freezeUntil > now,
     log: room.log.slice(-14),
   }
-}
-
-function callLabel(call: FifteenCall | null): string {
-  return call == null ? '未叫數' : String(call)
 }
 
 export class FifteenHub {
   private rooms = new Map<string, FifteenRoomState>()
   private connections = new Map<WSContext, Connection>()
-  private timers = new Map<string, RoomTimers>()
 
   handleOpen(_ws: WSContext): void {
     // wait for join
@@ -215,8 +198,11 @@ export class FifteenHub {
       case 'ready':
         this.handleReady(ws)
         break
-      case 'lock':
-        this.handleLock(ws, msg.call, msg.fingers)
+      case 'fingers':
+        this.handleFingers(ws, msg.count)
+        break
+      case 'call':
+        this.handleCall(ws, msg.call)
         break
       case 'leave':
         this.handleLeave(ws)
@@ -255,11 +241,8 @@ export class FifteenHub {
         players: [],
         winnerId: null,
         matchFormat: DEFAULT_MATCH_FORMAT,
-        round: 0,
-        roundPhase: null,
-        countdown: null,
-        throwDeadline: null,
-        lastResult: null,
+        lastHit: null,
+        freezeUntil: 0,
         log: [makeLog('房間已建立，等待對手加入…')],
         updatedAt: Date.now(),
       }
@@ -337,202 +320,101 @@ export class FifteenHub {
   }
 
   private startMatch(room: FifteenRoomState): void {
-    this.clearTimers(room.code)
     room.phase = 'playing'
     room.winnerId = null
-    room.round = 0
-    room.lastResult = null
+    room.lastHit = null
+    room.freezeUntil = 0
     for (const player of room.players) {
       player.score = 0
-      player.locked = null
+      player.fingers = 0
+      player.callBlockedUntil = 0
     }
-    room.log.push(
-      makeLog(`十五二十對戰開始！${formatLabel(room.matchFormat)}（先贏 ${winTargetFor(room.matchFormat)} 局）`),
-    )
+    room.log.push(makeLog(`開始！持續變手指，先叫中總和（5／10／15／20）得分 · ${formatLabel(room.matchFormat)}`))
     room.updatedAt = Date.now()
     this.broadcastRoom(room.code)
-    this.scheduleRound(room.code)
   }
 
-  private scheduleRound(roomCode: string): void {
-    const room = this.rooms.get(roomCode)
-    if (!room || room.phase !== 'playing') return
-
-    room.round += 1
-    room.roundPhase = 'countdown'
-    room.countdown = COUNTDOWN_SEC
-    room.throwDeadline = null
-    room.lastResult = null
-    for (const player of room.players) {
-      player.locked = null
-    }
-    room.updatedAt = Date.now()
-    room.log.push(makeLog(`第 ${room.round} 局開始倒數`))
-    this.broadcastRoom(roomCode)
-
-    this.runCountdown(roomCode, COUNTDOWN_SEC)
-  }
-
-  private runCountdown(roomCode: string, remaining: number): void {
-    const room = this.rooms.get(roomCode)
-    if (!room || room.phase !== 'playing' || room.roundPhase !== 'countdown') return
-
-    room.countdown = remaining
-    room.updatedAt = Date.now()
-    this.broadcastTick(roomCode, remaining)
-    this.broadcastRoom(roomCode)
-
-    if (remaining <= 0) {
-      this.beginThrowing(roomCode)
-      return
-    }
-
-    const timers = this.timers.get(roomCode) ?? {}
-    timers.countdown = setTimeout(() => this.runCountdown(roomCode, remaining - 1), 1000)
-    this.timers.set(roomCode, timers)
-  }
-
-  private beginThrowing(roomCode: string): void {
-    const room = this.rooms.get(roomCode)
-    if (!room || room.phase !== 'playing') return
-
-    room.roundPhase = 'throwing'
-    room.countdown = null
-    room.throwDeadline = Date.now() + THROW_MS
-    room.updatedAt = Date.now()
-    room.log.push(makeLog('出手！語音叫 5／10／15／20，同時伸手指'))
-    this.broadcastRoom(roomCode)
-
-    const timers = this.timers.get(roomCode) ?? {}
-    timers.throw = setTimeout(() => this.resolveRound(roomCode), THROW_MS)
-    this.timers.set(roomCode, timers)
-  }
-
-  private handleLock(ws: WSContext, call: FifteenCall, fingers: number): void {
+  private handleFingers(ws: WSContext, count: number): void {
     const ctx = this.requireConnection(ws)
     if (!ctx) return
     const room = this.rooms.get(ctx.roomCode)
-    if (!room || room.phase !== 'playing' || room.roundPhase !== 'throwing') return
+    if (!room || room.phase !== 'playing') return
 
     const player = room.players.find((p) => p.id === ctx.playerId)
-    if (!player || player.locked) return
+    if (!player) return
+
+    const next = clampFingers(count)
+    if (player.fingers === next) return
+
+    player.fingers = next
+    room.updatedAt = Date.now()
+    this.broadcastRoom(room.code)
+  }
+
+  private handleCall(ws: WSContext, call: FifteenCall): void {
+    const ctx = this.requireConnection(ws)
+    if (!ctx) return
+    const room = this.rooms.get(ctx.roomCode)
+    if (!room || room.phase !== 'playing') return
+
+    const [a, b] = room.players
+    if (!a || !b) return
+
+    const player = room.players.find((p) => p.id === ctx.playerId)
+    if (!player) return
 
     if (!isValidCall(call)) {
       this.send(ws, { type: 'error', message: '叫數須為 5／10／15／20' })
       return
     }
 
-    player.locked = { call, fingers: clampFingers(fingers) }
-    room.updatedAt = Date.now()
-    this.broadcastRoom(room.code)
-
-    if (room.players.every((p) => p.locked)) {
-      const timers = this.timers.get(room.code)
-      if (timers?.throw) clearTimeout(timers.throw)
-      this.resolveRound(room.code)
-    }
-  }
-
-  private resolveRound(roomCode: string): void {
-    const room = this.rooms.get(roomCode)
-    if (!room || room.phase !== 'playing') return
-
-    const [a, b] = room.players
-    if (!a || !b) return
-
-    room.roundPhase = 'reveal'
-    room.throwDeadline = null
-    room.updatedAt = Date.now()
-
-    const callA = a.locked?.call ?? null
-    const callB = b.locked?.call ?? null
-    const fingersA = a.locked?.fingers ?? null
-    const fingersB = b.locked?.fingers ?? null
-
-    let winnerId: string | 'draw' | null = null
-    let text = ''
-    let sum: number | null = null
-
-    if (fingersA == null && fingersB == null) {
-      text = '雙方都未出手，本局作廢'
-      winnerId = 'draw'
-    } else if (fingersA == null || fingersB == null || callA == null || callB == null) {
-      const aOk = callA != null && fingersA != null
-      const bOk = callB != null && fingersB != null
-      if (aOk && !bOk) {
-        a.score += 1
-        winnerId = a.id
-        text = `${a.name} 贏！對手未完成叫數／出手`
-      } else if (bOk && !aOk) {
-        b.score += 1
-        winnerId = b.id
-        text = `${b.name} 贏！對手未完成叫數／出手`
-      } else {
-        text = '雙方都未完成，本局作廢'
-        winnerId = 'draw'
-      }
-      if (fingersA != null && fingersB != null) sum = fingersA + fingersB
-    } else {
-      sum = fingersA + fingersB
-      const aHit = sum === callA
-      const bHit = sum === callB
-
-      if (aHit && bHit) {
-        text = `平手！總和 ${sum}，雙方都叫中`
-        winnerId = 'draw'
-      } else if (!aHit && !bHit) {
-        text = `平手！總和 ${sum}（你叫 ${callLabel(callA)}／對手叫 ${callLabel(callB)}）`
-        winnerId = 'draw'
-      } else if (aHit) {
-        a.score += 1
-        winnerId = a.id
-        text = `${a.name} 贏！總和 ${sum}＝叫數 ${callA}`
-      } else {
-        b.score += 1
-        winnerId = b.id
-        text = `${b.name} 贏！總和 ${sum}＝叫數 ${callB}`
-      }
+    const now = Date.now()
+    if (room.freezeUntil > now) {
+      this.send(ws, { type: 'miss', call, sum: a.fingers + b.fingers, message: '得分間隔中，繼續變手指…' })
+      return
     }
 
-    const result: RoundResult = {
-      round: room.round,
-      calls: { [a.id]: callA, [b.id]: callB },
-      fingers: { [a.id]: fingersA, [b.id]: fingersB },
+    if (player.callBlockedUntil > now) {
+      this.send(ws, { type: 'miss', call, sum: a.fingers + b.fingers, message: '稍等再叫' })
+      return
+    }
+
+    const sum = a.fingers + b.fingers
+    if (sum !== call) {
+      player.callBlockedUntil = now + MISS_BLOCK_MS
+      this.send(ws, {
+        type: 'miss',
+        call,
+        sum,
+        message: `唔中！而家總和係 ${sum}`,
+      })
+      return
+    }
+
+    // First correct call wins the point
+    player.score += 1
+    const result: HitResult = {
+      winnerId: player.id,
+      call,
       sum,
-      winnerId,
-      text,
+      fingers: { [a.id]: a.fingers, [b.id]: b.fingers },
+      text: `${player.name} 叫中 ${call}！（${a.fingers}+${b.fingers}）`,
+      at: now,
     }
-
-    room.lastResult = result
-    room.log.push(makeLog(text))
+    room.lastHit = result
+    room.freezeUntil = now + HIT_FREEZE_MS
+    room.log.push(makeLog(result.text))
+    room.updatedAt = now
 
     const target = winTargetFor(room.matchFormat)
-    if (a.score >= target) {
+    if (player.score >= target) {
       room.phase = 'finished'
-      room.winnerId = a.id
-      room.log.push(makeLog(`${a.name} 贏得整場對戰！`))
-    } else if (b.score >= target) {
-      room.phase = 'finished'
-      room.winnerId = b.id
-      room.log.push(makeLog(`${b.name} 贏得整場對戰！`))
+      room.winnerId = player.id
+      room.log.push(makeLog(`${player.name} 贏得整場！`))
     }
 
-    this.broadcastRoundResult(roomCode, result)
-    this.broadcastRoom(roomCode)
-
-    if (room.phase === 'playing') {
-      const timers = this.timers.get(roomCode) ?? {}
-      timers.reveal = setTimeout(() => {
-        const current = this.rooms.get(roomCode)
-        if (!current || current.phase !== 'playing') return
-        current.roundPhase = 'between'
-        current.updatedAt = Date.now()
-        this.broadcastRoom(roomCode)
-        timers.between = setTimeout(() => this.scheduleRound(roomCode), BETWEEN_MS)
-        this.timers.set(roomCode, timers)
-      }, REVEAL_MS)
-      this.timers.set(roomCode, timers)
-    }
+    this.broadcastHit(room.code, result)
+    this.broadcastRoom(room.code)
   }
 
   private handleLeave(ws: WSContext): void {
@@ -549,18 +431,15 @@ export class FifteenHub {
     const room = this.rooms.get(ctx.roomCode)
     if (!room || room.phase !== 'finished') return
 
-    this.clearTimers(room.code)
     room.phase = 'lobby'
     room.winnerId = null
-    room.round = 0
-    room.roundPhase = null
-    room.countdown = null
-    room.throwDeadline = null
-    room.lastResult = null
+    room.lastHit = null
+    room.freezeUntil = 0
     for (const player of room.players) {
       player.ready = false
       player.score = 0
-      player.locked = null
+      player.fingers = 0
+      player.callBlockedUntil = 0
     }
     room.updatedAt = Date.now()
     room.log.push(makeLog('等待雙方重新準備…'))
@@ -577,39 +456,27 @@ export class FifteenHub {
     const [removed] = room.players.splice(idx, 1)
     room.updatedAt = Date.now()
     room.log.push(makeLog(`${removed.name} 離開房間`))
-    this.clearTimers(roomCode)
 
     if (room.players.length === 0) {
       this.rooms.delete(roomCode)
-      this.timers.delete(roomCode)
       return
     }
 
     if (room.phase === 'playing') {
       room.phase = 'finished'
       room.winnerId = room.players[0]?.id ?? null
-      room.roundPhase = null
       room.log.push(makeLog('對手離線，對戰結束'))
     } else {
       room.phase = 'lobby'
       for (const p of room.players) {
         p.ready = false
         p.score = 0
-        p.locked = null
+        p.fingers = 0
+        p.callBlockedUntil = 0
       }
     }
 
     this.broadcastRoom(roomCode)
-  }
-
-  private clearTimers(roomCode: string): void {
-    const timers = this.timers.get(roomCode)
-    if (!timers) return
-    if (timers.countdown) clearTimeout(timers.countdown)
-    if (timers.throw) clearTimeout(timers.throw)
-    if (timers.reveal) clearTimeout(timers.reveal)
-    if (timers.between) clearTimeout(timers.between)
-    this.timers.delete(roomCode)
   }
 
   private requireConnection(ws: WSContext): Connection | null {
@@ -636,27 +503,10 @@ export class FifteenHub {
     }
   }
 
-  private broadcastTick(roomCode: string, countdown: number): void {
-    const payload: ServerMessage = { type: 'round_tick', countdown }
-    const json = JSON.stringify(payload)
-    for (const conn of this.connections.values()) {
-      if (conn.roomCode !== roomCode) continue
-      try {
-        conn.ws.send(json)
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  private broadcastRoundResult(roomCode: string, result: RoundResult): void {
+  private broadcastHit(roomCode: string, result: HitResult): void {
     const room = this.rooms.get(roomCode)
     if (!room) return
-    const payload: ServerMessage = {
-      type: 'round_result',
-      result,
-      room: toPublicRoom(room),
-    }
+    const payload: ServerMessage = { type: 'hit', result, room: toPublicRoom(room) }
     const json = JSON.stringify(payload)
     for (const conn of this.connections.values()) {
       if (conn.roomCode !== roomCode) continue
@@ -680,7 +530,6 @@ export class FifteenHub {
     const cutoff = Date.now() - ROOM_TTL_MS
     for (const [code, room] of this.rooms.entries()) {
       if (room.updatedAt < cutoff && room.players.length === 0) {
-        this.clearTimers(code)
         this.rooms.delete(code)
       }
     }

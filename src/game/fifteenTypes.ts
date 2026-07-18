@@ -2,17 +2,15 @@ export type MatchFormat = 'bo3' | 'bo5'
 
 export type FifteenCall = 5 | 10 | 15 | 20
 
-export type RoundPhase = 'countdown' | 'throwing' | 'reveal' | 'between'
-
 export type RoomPhase = 'lobby' | 'playing' | 'finished'
 
-export type RoundResult = {
-  round: number
-  calls: Record<string, FifteenCall | null>
-  fingers: Record<string, number | null>
-  sum: number | null
-  winnerId: string | 'draw' | null
+export type HitResult = {
+  winnerId: string
+  call: FifteenCall
+  sum: number
+  fingers: Record<string, number>
   text: string
+  at: number
 }
 
 export type FifteenLogEntry = {
@@ -26,7 +24,7 @@ export type PublicFifteenPlayer = {
   name: string
   ready: boolean
   score: number
-  locked: boolean
+  fingers: number
 }
 
 export type PublicFifteenRoom = {
@@ -36,26 +34,25 @@ export type PublicFifteenRoom = {
   winnerId: string | null
   matchFormat: MatchFormat
   winTarget: number
-  round: number
-  roundPhase: RoundPhase | null
-  countdown: number | null
-  throwDeadline: number | null
-  lastResult: RoundResult | null
+  sum: number | null
+  lastHit: HitResult | null
+  freezeUntil: number
+  frozen: boolean
   log: FifteenLogEntry[]
 }
 
 export type ServerMessage =
   | { type: 'joined'; room: PublicFifteenRoom; playerId: string }
   | { type: 'room_update'; room: PublicFifteenRoom }
-  | { type: 'round_tick'; countdown: number }
-  | { type: 'round_result'; result: RoundResult; room: PublicFifteenRoom }
+  | { type: 'hit'; result: HitResult; room: PublicFifteenRoom }
+  | { type: 'miss'; call: FifteenCall; sum: number; message: string }
   | { type: 'error'; message: string }
 
 export const FIFTEEN_CALLS: FifteenCall[] = [5, 10, 15, 20]
 
 export const MATCH_FORMAT_LABELS: Record<MatchFormat, string> = {
-  bo3: '三盤兩勝（先贏 2 局）',
-  bo5: '五盤三勝（先贏 3 局）',
+  bo3: '先贏 2 分',
+  bo5: '先贏 3 分',
 }
 
 export function winTargetFor(format: MatchFormat): number {

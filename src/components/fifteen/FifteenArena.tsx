@@ -6,9 +6,8 @@ type Props = {
   me: PublicFifteenPlayer | null
   opponent: PublicFifteenPlayer | null
   playerId: string | null
-  countdown: number | null
-  liveCall: FifteenCall | null
   liveFingers: number
+  missMessage: string | null
   speechOk: boolean
   onPickCall: (call: FifteenCall) => void
 }
@@ -18,17 +17,13 @@ export function FifteenArena({
   me,
   opponent,
   playerId,
-  countdown,
-  liveCall,
   liveFingers,
+  missMessage,
   speechOk,
   onPickCall,
 }: Props) {
-  const myCall = playerId ? room.lastResult?.calls[playerId] : null
-  const foeCall = opponent ? room.lastResult?.calls[opponent.id] : null
-  const myFingers = playerId ? room.lastResult?.fingers[playerId] : null
-  const foeFingers = opponent ? room.lastResult?.fingers[opponent.id] : null
-  const showReveal = room.roundPhase === 'reveal' && room.lastResult
+  const frozen = room.freezeUntil > Date.now()
+  const showHit = Boolean(room.lastHit && frozen)
 
   return (
     <div className="fifteen-arena">
@@ -38,13 +33,8 @@ export function FifteenArena({
           <strong>{me?.score ?? 0}</strong>
         </div>
         <div className="fifteen-arena-round">
-          {room.roundPhase === 'countdown' && countdown !== null && (
-            <span className="fifteen-countdown">{countdown || '出！'}</span>
-          )}
-          {room.roundPhase === 'throwing' && <span className="fifteen-throw-hint">出手！</span>}
-          {room.roundPhase === 'reveal' && <span className="fifteen-reveal-hint">揭曉</span>}
-          {room.roundPhase === 'between' && <span className="fifteen-between-hint">下一局…</span>}
-          <small>第 {room.round} 局 · 先贏 {room.winTarget} 局</small>
+          <span className="fifteen-throw-hint">{frozen ? '變手指…' : '鬥快叫數！'}</span>
+          <small>先贏 {room.winTarget} 分 · 即時變體</small>
         </div>
         <div className="fifteen-arena-score right">
           <span>{opponent?.name ?? '對手'}</span>
@@ -52,61 +42,44 @@ export function FifteenArena({
         </div>
       </div>
 
-      {room.roundPhase === 'throwing' && (
-        <div className="fifteen-throw-panel">
-          <div className="fifteen-live-stats">
-            <div>
-              <span>叫數</span>
-              <strong>{liveCall ?? '—'}</strong>
-            </div>
-            <div>
-              <span>指數</span>
-              <strong>{liveFingers}</strong>
-            </div>
+      <div className="fifteen-throw-panel">
+        <div className="fifteen-live-stats">
+          <div>
+            <span>你</span>
+            <strong>{liveFingers}</strong>
           </div>
-          {me?.locked ? (
-            <p className="fifteen-throw-status">✓ 已鎖定，等待對手…</p>
-          ) : (
-            <p className="fifteen-throw-status">
-              {speechOk ? '大聲叫「五／十／十五／二十」，同時伸手指' : '撳下方叫數，同時伸手指'}
-            </p>
-          )}
-          {!me?.locked && (
-            <div className="fifteen-call-btns" role="group" aria-label="叫數">
-              {FIFTEEN_CALLS.map((call) => (
-                <button
-                  key={call}
-                  type="button"
-                  className={liveCall === call ? 'active' : undefined}
-                  onClick={() => onPickCall(call)}
-                >
-                  {call}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {showReveal && (
-        <div className="fifteen-reveal">
-          <div className="fifteen-reveal-card self">
-            <span>{me?.name ?? '你'}</span>
-            <strong>叫 {myCall ?? '—'}</strong>
-            <small>{myFingers == null ? '未出手' : `${myFingers} 指`}</small>
+          <div>
+            <span>對手</span>
+            <strong>{opponent?.fingers ?? '—'}</strong>
           </div>
-          <div className="fifteen-reveal-vs">
+          <div className="fifteen-sum-stat">
             <span>總和</span>
-            <strong>{room.lastResult?.sum ?? '—'}</strong>
+            <strong>{room.sum ?? '—'}</strong>
           </div>
-          <div className="fifteen-reveal-card foe">
-            <span>{opponent?.name ?? '對手'}</span>
-            <strong>叫 {foeCall ?? '—'}</strong>
-            <small>{foeFingers == null ? '未出手' : `${foeFingers} 指`}</small>
-          </div>
-          <p className="fifteen-reveal-text">{room.lastResult?.text}</p>
         </div>
-      )}
+
+        {showHit ? (
+          <p className="fifteen-throw-status hit">{room.lastHit?.text}</p>
+        ) : (
+          <p className="fifteen-throw-status">
+            {speechOk
+              ? '持續變手指，睇準總和就大聲叫「五／十／十五／二十」'
+              : '持續變手指，睇準總和就撳下方叫數'}
+          </p>
+        )}
+
+        {missMessage && !frozen && <p className="fifteen-miss">{missMessage}</p>}
+
+        {!frozen && room.phase === 'playing' && (
+          <div className="fifteen-call-btns" role="group" aria-label="叫數">
+            {FIFTEEN_CALLS.map((call) => (
+              <button key={call} type="button" onClick={() => onPickCall(call)}>
+                {call}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {room.phase === 'finished' && (
         <div className="fifteen-match-over">

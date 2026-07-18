@@ -2,6 +2,14 @@ import type { HandFrame, Landmark } from '../types'
 
 const POINTS = 21
 
+/**
+ * Finger count for 十五二十:
+ * - Open palm (包) → 5
+ * - Fist (拳頭) → 0
+ * - Both hands → max 10 per player
+ *
+ * Extended if tip is farther from MCP than the pip/IP joint (thumb: tip vs IP from MCP).
+ */
 function isEmptyHand(hand: Landmark[]): boolean {
   return hand.every((p) => p.x === 0 && p.y === 0 && p.z === 0)
 }
@@ -10,29 +18,32 @@ function dist(a: Landmark, b: Landmark): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 }
 
-/** Count extended fingers on one hand using tip vs pip (thumb tip vs IP). */
+/** Tip farther from MCP than joint → finger counts as open. */
+function isExtended(hand: Landmark[], tip: number, joint: number, mcp: number): boolean {
+  return dist(hand[tip], hand[mcp]) > dist(hand[joint], hand[mcp]) * 1.08
+}
+
 function countOneHand(hand: Landmark[]): number {
   if (hand.length < POINTS || isEmptyHand(hand)) return 0
-  const wrist = hand[0]
   let n = 0
 
-  // Thumb: tip 4 vs IP 3
-  if (dist(hand[4], wrist) > dist(hand[3], wrist) * 1.05) n += 1
+  // Thumb: tip 4 vs IP 3, relative to MCP 2
+  if (isExtended(hand, 4, 3, 2)) n += 1
 
-  // Index / middle / ring / pinky: tip vs pip
-  const pairs: [number, number][] = [
-    [8, 6],
-    [12, 10],
-    [16, 14],
-    [20, 18],
+  // Index / middle / ring / pinky: tip vs pip, relative to MCP
+  const fingers: [number, number, number][] = [
+    [8, 6, 5],
+    [12, 10, 9],
+    [16, 14, 13],
+    [20, 18, 17],
   ]
-  for (const [tip, pip] of pairs) {
-    if (dist(hand[tip], wrist) > dist(hand[pip], wrist) * 1.05) n += 1
+  for (const [tip, pip, mcp] of fingers) {
+    if (isExtended(hand, tip, pip, mcp)) n += 1
   }
   return n
 }
 
-/** Dual-hand frame (42) or single (21); total clamped to 0–10. */
+/** Dual-hand (42) or single (21); per player clamped to 0–10. */
 export function countFingers(frame: HandFrame | null): number {
   if (!frame || frame.length === 0) return 0
 
