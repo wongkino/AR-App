@@ -35,7 +35,7 @@
 .viewport {
   position: relative;
   width: min(100%, 72dvh, 720px);
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   flex: none;
   border-radius: calc(var(--radius) + 6px);
   overflow: hidden;
@@ -661,15 +661,15 @@ button:disabled {
 
   .viewport {
     width: min(100%, 52dvh, 420px);
-    max-height: min(52dvh, 420px);
-    aspect-ratio: 1 / 1;
+    max-height: min(calc(52dvh * 3 / 4), calc(420px * 3 / 4));
+    aspect-ratio: 4 / 3;
     border-radius: var(--radius);
     margin-inline: auto;
   }
 
   .app.is-recording .viewport {
     width: min(100%, 58dvh, 480px);
-    max-height: min(58dvh, 480px);
+    max-height: min(calc(58dvh * 3 / 4), calc(480px * 3 / 4));
   }
 
   .panel {
@@ -688,13 +688,13 @@ button:disabled {
 
 @media (max-width: 900px) {
   .viewport {
-    width: min(100%, 48dvh, 92dvw);
-    max-height: min(48dvh, 92dvw);
-    aspect-ratio: 1 / 1;
+    width: min(100%, 92dvw);
+    max-height: min(56dvh, calc(92dvw * 3 / 4));
+    aspect-ratio: 4 / 3;
   }
 
   .app.is-recording .viewport {
-    width: min(100%, 56dvh, 92dvw);
-    max-height: min(56dvh, 92dvw);
+    width: min(100%, 92dvw);
+    max-height: min(60dvh, calc(92dvw * 3 / 4));
   }
 }

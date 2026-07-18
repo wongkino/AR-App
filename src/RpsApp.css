@@ -405,9 +405,9 @@
   }
 
   .rps-viewport {
-    width: min(100%, 48dvh, 92dvw);
-    max-height: min(48dvh, 92dvw);
-    aspect-ratio: 1 / 1;
+    width: min(100%, 92dvw);
+    max-height: min(56dvh, calc(92dvw * 3 / 4));
+    aspect-ratio: 4 / 3;
     margin-inline: auto;
   }
 }
