@@ -1,7 +1,7 @@
 {
   "name": "gesture-lab-api",
   "private": true,
-  "version": "0.6.11",
+  "version": "0.6.12",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

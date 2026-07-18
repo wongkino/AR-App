@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.12] - 2026-07-18
+
+- Remap RPS emojis to ✋包／✌️剪／👊揼. (62d020b)
+
 ## [v0.6.11] - 2026-07-18
 
 - Show RPS moves with matching emojis 👊✌️✋. (9251169)
