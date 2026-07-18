@@ -24,6 +24,8 @@ export default function FifteenApp() {
   const [speechArmed, setSpeechArmed] = useState(false)
   const [liveFingers, setLiveFingers] = useState(0)
   const [missMessage, setMissMessage] = useState<string | null>(null)
+  const [speechHeard, setSpeechHeard] = useState<string | null>(null)
+  const [speechHint, setSpeechHint] = useState<string | null>(null)
   const [speechOk] = useState(() => speechRecognitionSupported())
   const [now, setNow] = useState(() => Date.now())
 
@@ -124,28 +126,28 @@ export default function FifteenApp() {
     void syncVoice(room, playerId)
   }, [micOn, room, playerId, syncVoice])
 
-  // Keep speech warm once armed; only score calls during playing
+  // Keep speech warm once armed — do not restart on freeze/now ticks
   useEffect(() => {
     if (!speechArmed || !speechOk) {
       speechRef.current.stop()
       return
     }
 
-    const frozen = Boolean(room?.freezeUntil && room.freezeUntil > Date.now())
-    if (room?.phase === 'playing' && frozen) {
-      speechRef.current.stop()
-      return
-    }
-
-    speechRef.current.start((call) => {
-      if (roomRef.current?.phase === 'playing') sendCall(call)
-    })
+    speechRef.current.start(
+      (call) => {
+        if (roomRef.current?.phase === 'playing') sendCall(call)
+      },
+      (status) => {
+        if (status.lastHeard) setSpeechHeard(status.lastHeard)
+        setSpeechHint(status.error)
+      },
+    )
 
     return () => speechRef.current.stop()
-  }, [speechArmed, speechOk, room?.phase, room?.freezeUntil, room?.lastHit?.at, now, sendCall])
+  }, [speechArmed, speechOk, sendCall])
 
-  const onFrame = useCallback((frame: HandFrame | null) => {
-    const fingers = countFingers(frame, handModeRef.current)
+  const onFrame = useCallback((normalized: HandFrame | null, raw?: HandFrame | null) => {
+    const fingers = countFingers(raw ?? normalized, handModeRef.current)
     setLiveFingers(fingers)
 
     const currentRoom = roomRef.current
@@ -163,15 +165,21 @@ export default function FifteenApp() {
     await unlockSfx()
     await startCamera()
     setCameraOn(true)
-    const micOk = await voiceRef.current.ensureMic()
-    setMicOn(micOk)
-    if (!micOk) {
-      setError('未能開啟麥克風；仍可玩，但聽唔到／傳唔到對方叫聲')
-    }
-    // Delay speech so Safari does not abort video.play() / camera start.
-    if (speechOk) {
-      window.setTimeout(() => setSpeechArmed(true), 400)
-    }
+    // Start speech first, then open WebRTC mic; re-arm speech after mic settles
+    if (speechOk) setSpeechArmed(true)
+    window.setTimeout(() => {
+      void (async () => {
+        const micOk = await voiceRef.current.ensureMic()
+        setMicOn(micOk)
+        if (!micOk) {
+          setError((prev) => prev ?? '未能開啟通話麥克風；仍可用按鈕／語音叫數')
+        }
+        if (speechOk) {
+          setSpeechArmed(false)
+          window.setTimeout(() => setSpeechArmed(true), 200)
+        }
+      })()
+    }, 450)
   }, [speechOk, startCamera])
 
   useEffect(() => () => stopCamera(), [stopCamera])
@@ -271,6 +279,8 @@ export default function FifteenApp() {
             liveFingers={liveFingers}
             missMessage={missMessage}
             speechOk={speechOk}
+            speechHeard={speechHeard}
+            speechHint={speechHint}
             onPickCall={sendCall}
           />
         )}

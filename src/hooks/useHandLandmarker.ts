@@ -40,7 +40,7 @@ function handednessLabel(categories: Category[] | undefined): 'Left' | 'Right' |
 }
 
 export function useHandLandmarker(
-  onFrame?: (frame: HandFrame | null) => void,
+  onFrame?: (normalized: HandFrame | null, raw?: HandFrame | null) => void,
 ): UseHandLandmarkerResult {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -206,21 +206,35 @@ export function useHandLandmarker(
         setHandCount(count)
       }
 
-      let frame: HandFrame | null = null
+      let normalizedFrame: HandFrame | null = null
+      let rawFrame: HandFrame | null = null
       if (count > 0) {
         let left: HandFrame | null = null
         let right: HandFrame | null = null
+        let rawLeft: HandFrame | null = null
+        let rawRight: HandFrame | null = null
 
         result.landmarks.forEach((landmarks, i) => {
           const label = handednessLabel(result.handedness[i])
-          const normalized = normalizeFrame(toLandmarks(landmarks))
-          if (label === 'Left') left = normalized
-          else if (label === 'Right') right = normalized
-          else if (!left) left = normalized
-          else if (!right) right = normalized
+          const raw = toLandmarks(landmarks)
+          const normalized = normalizeFrame(raw)
+          if (label === 'Left') {
+            left = normalized
+            rawLeft = raw
+          } else if (label === 'Right') {
+            right = normalized
+            rawRight = raw
+          } else if (!left) {
+            left = normalized
+            rawLeft = raw
+          } else if (!right) {
+            right = normalized
+            rawRight = raw
+          }
         })
 
-        frame = packDualHand(left, right)
+        normalizedFrame = packDualHand(left, right)
+        rawFrame = packDualHand(rawLeft, rawRight)
         drawHands(
           result.landmarks,
           result.handedness,
@@ -233,7 +247,7 @@ export function useHandLandmarker(
         if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
       }
 
-      onFrameRef.current?.(frame)
+      onFrameRef.current?.(normalizedFrame, rawFrame)
     } catch {
       // MediaPipe can throw if the video frame is invalid right after audio
       // session changes on iOS. Swallow and keep the loop alive.

@@ -8,6 +8,8 @@ type Props = {
   liveFingers: number
   missMessage: string | null
   speechOk: boolean
+  speechHeard: string | null
+  speechHint: string | null
   onPickCall: (call: FifteenCall) => void
 }
 
@@ -18,6 +20,8 @@ export function FifteenArena({
   liveFingers,
   missMessage,
   speechOk,
+  speechHeard,
+  speechHint,
   onPickCall,
 }: Props) {
   const frozen = room.freezeUntil > Date.now()
@@ -62,6 +66,10 @@ export function FifteenArena({
           </p>
         )}
 
+        {speechOk && speechHeard && !frozen && (
+          <p className="fifteen-speech-heard">聽到：{speechHeard}</p>
+        )}
+        {speechHint && <p className="fifteen-miss">{speechHint}</p>}
         {missMessage && !frozen && <p className="fifteen-miss">{missMessage}</p>}
 
         {!frozen && room.phase === 'playing' && (

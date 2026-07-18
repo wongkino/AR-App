@@ -163,6 +163,13 @@
   font-size: 0.95rem;
 }
 
+.fifteen-speech-heard {
+  margin: 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .fifteen-live-stats span {
   font-size: 0.8rem;
   color: var(--muted);
