@@ -29,11 +29,28 @@ export class RpsGestureMatcher {
     this.lastMatchAt = 0
   }
 
-  tryMatch(loadout: RpsLoadout, gestureTemplatesMap: Map<string, HandFrame[][]>): RpsMatch | null {
-    if (this.buffer.length < 6) return null
+  /** Score current buffer without consuming it (for live camera hint). */
+  peekMatch(loadout: RpsLoadout, gestureTemplatesMap: Map<string, HandFrame[][]>): RpsMatch | null {
+    return this.scoreBuffer(loadout, gestureTemplatesMap)
+  }
 
+  tryMatch(loadout: RpsLoadout, gestureTemplatesMap: Map<string, HandFrame[][]>): RpsMatch | null {
     const now = performance.now()
     if (now - this.lastMatchAt < COOLDOWN_MS) return null
+
+    const best = this.scoreBuffer(loadout, gestureTemplatesMap)
+    if (!best) return null
+
+    this.lastMatchAt = now
+    this.buffer = []
+    return best
+  }
+
+  private scoreBuffer(
+    loadout: RpsLoadout,
+    gestureTemplatesMap: Map<string, HandFrame[][]>,
+  ): RpsMatch | null {
+    if (this.buffer.length < 6) return null
 
     const live = this.buffer.map((b) => b.frame)
     let best: RpsMatch | null = null
@@ -57,10 +74,6 @@ export class RpsGestureMatcher {
       }
     }
 
-    if (!best) return null
-
-    this.lastMatchAt = now
-    this.buffer = []
     return best
   }
 }

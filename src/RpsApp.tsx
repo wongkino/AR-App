@@ -30,6 +30,7 @@ export default function RpsApp() {
   const [cameraOn, setCameraOn] = useState(false)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [flashMove, setFlashMove] = useState<RpsMove | null>(null)
+  const [detectedMove, setDetectedMove] = useState<RpsMove | null>(null)
 
   const socketRef = useRef(new RpsSocket())
   const matcherRef = useRef(new RpsGestureMatcher())
@@ -37,6 +38,7 @@ export default function RpsApp() {
   const playerIdRef = useRef(playerId)
   const loadoutRef = useRef(loadout)
   const throwingRef = useRef(false)
+  const lastPeekAtRef = useRef(0)
 
   useEffect(() => {
     roomRef.current = room
@@ -121,7 +123,27 @@ export default function RpsApp() {
 
   const onFrame = useCallback(
     (frame: HandFrame | null) => {
-      if (!frame) return
+      if (!frame) {
+        setDetectedMove(null)
+        return
+      }
+
+      const loadoutNow = loadoutRef.current
+      if (!isRpsLoadoutComplete(loadoutNow)) {
+        setDetectedMove(null)
+        return
+      }
+
+      const matcher = matcherRef.current
+      matcher.push(frame)
+
+      const now = performance.now()
+      if (now - lastPeekAtRef.current >= 120) {
+        lastPeekAtRef.current = now
+        const preview = matcher.peekMatch(loadoutNow, gestureFrames)
+        setDetectedMove(preview?.move ?? null)
+      }
+
       const currentRoom = roomRef.current
       if (!currentRoom || currentRoom.phase !== 'playing' || currentRoom.roundPhase !== 'throwing') {
         return
@@ -129,16 +151,14 @@ export default function RpsApp() {
 
       const me = currentRoom.players.find((p) => p.id === playerIdRef.current)
       if (me?.locked) return
-
-      const matcher = matcherRef.current
-      matcher.push(frame)
       if (throwingRef.current) return
 
-      const match = matcher.tryMatch(loadoutRef.current, gestureFrames)
+      const match = matcher.tryMatch(loadoutNow, gestureFrames)
       if (!match) return
 
       throwingRef.current = true
       setFlashMove(match.move)
+      setDetectedMove(match.move)
       socketRef.current.throwMove(match.move, match.gestureId, match.score)
       window.setTimeout(() => {
         throwingRef.current = false
@@ -249,7 +269,13 @@ export default function RpsApp() {
 
         {cameraOn && (
           <p className="rps-hand-hint">
-            {handCount > 0 ? `偵測到 ${handCount} 隻手` : '請將手部放入鏡頭'}
+            {handCount === 0
+              ? '請將手部放入鏡頭'
+              : detectedMove
+                ? `偵測到 ${RPS_LABELS[detectedMove]}`
+                : loadoutReady
+                  ? `對住鏡頭做 ${RPS_LABELS.rock}／${RPS_LABELS.scissors}／${RPS_LABELS.paper}`
+                  : '請先完成手勢配對'}
           </p>
         )}
 
