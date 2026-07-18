@@ -4,18 +4,18 @@ import './HomePage.css'
 
 const GAMES = [
   {
-    href: '/fight',
-    title: '手勢格鬥',
-    desc: '2 人即時對戰。用手勢出拳、踢、必殺、擋，對住鏡頭扣 HP。',
+    href: '/1520',
+    title: '十五二十',
+    desc: '語音叫 5／10／15／20，雙手伸手指；總和等於自己叫的數就贏。',
     tag: 'Multiplayer',
-    emoji: '🥊',
+    emoji: '✋',
   },
   {
     href: '/rps',
     title: '包剪揼',
     desc: '2 人包剪揼。三盤兩勝，倒數後同時出招。',
     tag: 'Multiplayer',
-    emoji: '✋',
+    emoji: '✌️',
   },
 ] as const
 
@@ -27,7 +27,7 @@ export default function HomePage() {
       <header className="home-header">
         <p className="home-kicker">Gesture Lab</p>
         <h1>選擇遊戲</h1>
-        <p className="home-lede">用手勢玩多人遊戲。管理員請先在設定完成手勢配對，再開局。</p>
+        <p className="home-lede">用手勢玩多人遊戲。包剪揼需先在設定完成手勢配對；十五二十用相機數指即可。</p>
       </header>
 
       <div className="home-grid">

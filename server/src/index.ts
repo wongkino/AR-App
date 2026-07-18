@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Context, Next } from 'hono'
 import { initDb, pool } from './db.js'
-import { gameHub } from './game.js'
+import { fifteenHub } from './fifteen.js'
 import {
   emptySharedLoadouts,
   ensureLoadoutTable,
@@ -51,16 +51,16 @@ async function requireAdmin(c: Context, next: Next) {
 app.get('/api/health', (c) => c.json({ ok: true }))
 
 app.get(
-  '/ws/fight',
+  '/ws/1520',
   upgradeWebSocket(() => ({
     onOpen(_event, ws) {
-      gameHub.handleOpen(ws)
+      fifteenHub.handleOpen(ws)
     },
     onMessage(event, ws) {
-      gameHub.handleMessage(ws, String(event.data))
+      fifteenHub.handleMessage(ws, String(event.data))
     },
     onClose(_event, ws) {
-      gameHub.handleClose(ws)
+      fifteenHub.handleClose(ws)
     },
   })),
 )
@@ -175,7 +175,6 @@ app.put('/api/loadouts', requireAdmin, async (c) => {
     return c.json({ error: '無效的配對資料' }, 400)
   }
   const loadouts = await setSharedLoadouts({
-    fight: incoming.fight ?? emptySharedLoadouts().fight,
     rps: incoming.rps ?? emptySharedLoadouts().rps,
   })
   return c.json({ ok: true, loadouts })

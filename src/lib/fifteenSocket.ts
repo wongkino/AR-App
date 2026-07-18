@@ -1,22 +1,24 @@
-import type { MoveLoadout, PublicRoomState, ServerMessage } from '../game/types'
+import type { MatchFormat, PublicFifteenRoom, ServerMessage } from '../game/fifteenTypes'
+import type { FifteenCall } from '../game/fifteenTypes'
 
 type Handlers = {
   onOpen?: () => void
-  onJoined?: (room: PublicRoomState, playerId: string) => void
-  onRoomUpdate?: (room: PublicRoomState) => void
-  onAttack?: (payload: Extract<ServerMessage, { type: 'attack_result' }>) => void
+  onJoined?: (room: PublicFifteenRoom, playerId: string) => void
+  onRoomUpdate?: (room: PublicFifteenRoom) => void
+  onRoundTick?: (countdown: number) => void
+  onRoundResult?: (payload: Extract<ServerMessage, { type: 'round_result' }>) => void
   onError?: (message: string) => void
   onClose?: () => void
 }
 
 function wsUrl(): string {
-  const env = import.meta.env.VITE_WS_URL as string | undefined
+  const env = import.meta.env.VITE_FIFTEEN_WS_URL as string | undefined
   if (env) return env.replace(/\/$/, '')
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${window.location.host}/ws/fight`
+  return `${proto}//${window.location.host}/ws/1520`
 }
 
-export class FightSocket {
+export class FifteenSocket {
   private ws: WebSocket | null = null
   private handlers: Handlers = {}
 
@@ -29,9 +31,7 @@ export class FightSocket {
     const ws = new WebSocket(wsUrl())
     this.ws = ws
 
-    ws.onopen = () => {
-      handlers.onOpen?.()
-    }
+    ws.onopen = () => handlers.onOpen?.()
 
     ws.onmessage = (event) => {
       let msg: ServerMessage
@@ -49,8 +49,11 @@ export class FightSocket {
         case 'room_update':
           handlers.onRoomUpdate?.(msg.room)
           break
-        case 'attack_result':
-          handlers.onAttack?.(msg)
+        case 'round_tick':
+          handlers.onRoundTick?.(msg.countdown)
+          break
+        case 'round_result':
+          handlers.onRoundResult?.(msg)
           break
         case 'error':
           handlers.onError?.(msg.message)
@@ -84,12 +87,16 @@ export class FightSocket {
     this.send({ type: 'join', roomCode, playerName, create })
   }
 
-  ready(loadout: MoveLoadout): void {
-    this.send({ type: 'ready', loadout })
+  setFormat(format: MatchFormat): void {
+    this.send({ type: 'set_format', format })
   }
 
-  attack(move: string, gestureId: string, score: number): void {
-    this.send({ type: 'attack', move, gestureId, score })
+  ready(): void {
+    this.send({ type: 'ready' })
+  }
+
+  lock(call: FifteenCall, fingers: number): void {
+    this.send({ type: 'lock', call, fingers })
   }
 
   rematch(): void {

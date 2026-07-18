@@ -1,6 +1,6 @@
 import type { SavedGesture } from '../types'
 import type { SharedLoadouts } from './loadoutStorage'
-import { emptySharedLoadouts, normalizeFightLoadout, normalizeRpsLoadout } from './loadoutStorage'
+import { emptySharedLoadouts, normalizeRpsLoadout } from './loadoutStorage'
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
@@ -58,10 +58,7 @@ export async function pushGestures(gestures: SavedGesture[]): Promise<void> {
 
 export async function fetchLoadouts(): Promise<SharedLoadouts> {
   const data = await request<{ loadouts: SharedLoadouts }>('/api/loadouts')
-  return {
-    fight: normalizeFightLoadout(data.loadouts?.fight),
-    rps: normalizeRpsLoadout(data.loadouts?.rps),
-  }
+  return { rps: normalizeRpsLoadout(data.loadouts?.rps) }
 }
 
 export async function pushLoadouts(loadouts: SharedLoadouts): Promise<SharedLoadouts> {
@@ -69,10 +66,7 @@ export async function pushLoadouts(loadouts: SharedLoadouts): Promise<SharedLoad
     method: 'PUT',
     admin: true,
     body: JSON.stringify({
-      loadouts: {
-        fight: normalizeFightLoadout(loadouts.fight),
-        rps: normalizeRpsLoadout(loadouts.rps),
-      },
+      loadouts: { rps: normalizeRpsLoadout(loadouts.rps) },
     }),
   })
   return data.loadouts ?? emptySharedLoadouts()
