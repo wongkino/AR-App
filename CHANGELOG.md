@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.20] - 2026-07-18
+
+- Bump runtime to Node.js 24 across Docker, CI, and engines. (6efa9dd)
+
 ## [v0.6.19] - 2026-07-18
 
 - Fix RPS win rules for Cantonese 包剪揼 and pin ready under camera. (f23c271)
