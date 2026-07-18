@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.22] - 2026-07-18
+
+- Upgrade GitHub Actions to Node 24-compatible checkout/setup-node v5. (0f48fca)
+
 ## [v0.6.21] - 2026-07-18
 
 - Remove redundant RPS lobby loadout pairing panel. (07d0280)
