@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.11] - 2026-07-18
+
+- Show RPS moves with matching emojis 👊✌️✋. (9251169)
+
 ## [v0.6.10] - 2026-07-18
 
 - Store shared gesture loadouts on the server for all players. (2ef29ec)
