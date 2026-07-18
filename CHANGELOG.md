@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.6.16] - 2026-07-18
+
+- Use 4:3 camera viewports on mobile and settings. (8ab3782)
+
 ## [v0.6.15] - 2026-07-18
 
 - Support multi-player fifteen-twenty and open media before match. (8d1af7a)
